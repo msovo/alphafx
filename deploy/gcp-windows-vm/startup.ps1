@@ -7,11 +7,20 @@ param(
     [string]$RepoUrl    = "https://github.com/msovo/alphafx.git",
     [string]$Branch     = "feature/multi-user-platform",
     [string]$InstallDir = "C:\alphabot-fx",
-    [string]$PythonVer  = "3.13.0"
+    [string]$PythonVer  = "3.13.0",
+    [string]$GitHubToken = $env:GITHUB_TOKEN
 )
 
 $ErrorActionPreference = "Stop"
 Write-Host "==> AlphaBot FX VM bootstrap" -ForegroundColor Cyan
+
+# Build authenticated URL for private repo if a token was provided
+$AuthRepoUrl = $RepoUrl
+if ($GitHubToken) {
+    $AuthRepoUrl = $RepoUrl -replace "https://", "https://x-access-token:$GitHubToken@"
+    # Persist so the scheduled auto-update can also pull
+    [System.Environment]::SetEnvironmentVariable("GITHUB_TOKEN", $GitHubToken, "Machine")
+}
 
 # ---- 1. Chocolatey -------------------------------------------------------
 if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
@@ -44,13 +53,14 @@ if (-not (Test-Path "C:\Program Files\MetaTrader 5\terminal64.exe")) {
 if (Test-Path $InstallDir) {
     Write-Host "==> Repo exists — pulling latest"
     Push-Location $InstallDir
+    git remote set-url origin $AuthRepoUrl
     git fetch origin
     git checkout $Branch
     git pull origin $Branch
     Pop-Location
 } else {
     Write-Host "==> Cloning $RepoUrl ($Branch)"
-    git clone --branch $Branch $RepoUrl $InstallDir
+    git clone --branch $Branch $AuthRepoUrl $InstallDir
 }
 
 # ---- 5. Python venv + deps -----------------------------------------------
