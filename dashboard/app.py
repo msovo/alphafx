@@ -54,6 +54,37 @@ _bootstrap()
 # Auth gate — show login screen if not signed in
 # ---------------------------------------------------------------------------
 if "auth_user_id" not in st.session_state:
+    # Try silent auto-login from "Remember me" cookie
+    try:
+        from auth.cookies import get_session_cookie, clear_session_cookie
+        from auth.users import verify_session_token
+        _tok = get_session_cookie()
+        if _tok:
+            _u = verify_session_token(_tok)
+            if _u:
+                st.session_state["auth_user_id"] = _u.id
+                st.session_state["auth_username"] = _u.username
+                st.session_state["auth_role"] = _u.role
+                st.session_state["_ab_session_token"] = _tok
+                # Activate per-user context
+                try:
+                    get_settings().set_active_user(_u.id)
+                except Exception:                          # noqa: BLE001
+                    pass
+                try:
+                    from journal.db import init_db, log_audit
+                    init_db()
+                    log_audit("auto_login", actor=_u.username)
+                except Exception:                          # noqa: BLE001
+                    pass
+                st.rerun()
+            else:
+                # Stale/expired cookie — clear it
+                clear_session_cookie()
+    except Exception:                                       # noqa: BLE001
+        pass
+
+if "auth_user_id" not in st.session_state:
     from dashboard.views import _login
     _login.render()
     st.stop()
@@ -137,7 +168,16 @@ with st.sidebar:
             get_scheduler().shutdown()
         except Exception:                                  # noqa: BLE001
             pass
-        for k in ("auth_user_id", "auth_username", "auth_role", "_bootstrapped"):
+        # Revoke this device's persistent token + clear cookie
+        try:
+            from auth.users import revoke_session_token
+            from auth.cookies import clear_session_cookie
+            revoke_session_token(st.session_state.get("_ab_session_token"))
+            clear_session_cookie()
+        except Exception:                                  # noqa: BLE001
+            pass
+        for k in ("auth_user_id", "auth_username", "auth_role",
+                  "_bootstrapped", "_ab_session_token"):
             st.session_state.pop(k, None)
         get_settings().set_active_user(None)
         try:
