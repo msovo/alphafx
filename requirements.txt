@@ -1,0 +1,51 @@
+# ===== AlphaBot FX — Python dependencies =====
+# Core
+python-dotenv>=1.0.0
+loguru>=0.7.2
+pydantic>=2.7.0
+pydantic-settings>=2.3.0
+APScheduler>=3.10.4
+tenacity>=8.3.0
+
+# Broker / Market data
+MetaTrader5>=5.0.45 ; sys_platform == "win32"
+yfinance>=0.2.40              # Fallback / dev data source when MT5 unavailable
+
+# Data & analytics
+pandas>=2.2.0
+numpy>=1.26.0
+pandas-ta>=0.3.14b0
+scipy>=1.13.0
+
+# Machine learning
+scikit-learn>=1.5.0
+joblib>=1.4.0
+xgboost>=2.0.3                # Optional second-stage booster
+
+# AI Reasoning
+google-genai>=1.0.0
+google-cloud-aiplatform>=1.60.0
+
+# Web / HTTP
+requests>=2.32.0
+httpx>=0.27.0
+
+# Dashboard
+streamlit>=1.36.0
+streamlit-autorefresh>=1.0.1
+streamlit-option-menu>=0.3.13
+plotly>=5.22.0
+altair>=5.3.0
+
+# Notifications
+python-telegram-bot>=20.7
+
+# Reports
+reportlab>=4.2.0
+jinja2>=3.1.4
+
+# Dev / testing
+pytest>=8.2.0
+pytest-asyncio>=0.23.0
+black>=24.4.0
+ruff>=0.4.0

@@ -1,0 +1,18 @@
+{
+  "status": "running",
+  "mode": "full_auto",
+  "started_at": "2026-04-26 11:48:25",
+  "last_heartbeat": "2026-04-26 11:53:25",
+  "last_scan": "2026-04-26 11:52:19",
+  "last_error": null,
+  "open_positions": 0,
+  "daily_trades": 0,
+  "daily_pnl": 0.0,
+  "daily_dd_pct": 0.0,
+  "total_dd_pct": 0.0,
+  "peak_equity": 10000.0,
+  "kill_switch_reason": null,
+  "active_session": "london",
+  "next_news_event": null,
+  "notes": []
+}

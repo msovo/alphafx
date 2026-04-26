@@ -1,0 +1,200 @@
+/* === AlphaBot FX — Mobile-first dashboard skin === */
+:root {
+  --primary: #00d4aa;
+  --primary-2: #22e3b9;
+  --primary-soft: rgba(0, 212, 170, 0.14);
+  --primary-glow: 0 0 0 1px rgba(0,212,170,.35), 0 0 22px rgba(0,212,170,.18);
+  --bg: #0e1117;
+  --panel: #1a1d24;
+  --panel-2: #232730;
+  --text: #e6e9ef;
+  --text-dim: #8b93a7;
+  --good: #00d4aa;
+  --warn: #ffb648;
+  --bad: #ff5d6a;
+  --border: rgba(255,255,255,0.06);
+  --border-strong: rgba(255,255,255,0.12);
+}
+
+/* Background glow accents */
+.stApp {
+  background:
+    radial-gradient(1100px 600px at 12% -10%, rgba(0,212,170,0.07), transparent 60%),
+    radial-gradient(900px 500px at 92% 8%, rgba(125,211,252,0.05), transparent 60%),
+    var(--bg) !important;
+}
+
+/* Streamlit container width */
+.block-container {
+  padding-top: 1.2rem !important;
+  padding-bottom: 2.5rem !important;
+  max-width: 1400px;
+}
+
+/* Sidebar polish */
+section[data-testid="stSidebar"] {
+  background: linear-gradient(180deg, #11141b 0%, #0c0f15 100%);
+  border-right: 1px solid var(--border);
+  box-shadow: 4px 0 24px rgba(0,0,0,0.35);
+}
+section[data-testid="stSidebar"] .nav-link { margin: 2px 0; }
+section[data-testid="stSidebar"] .nav-link:hover {
+  background: rgba(255,255,255,0.04) !important;
+}
+section[data-testid="stSidebar"] .nav-link.active,
+section[data-testid="stSidebar"] .nav-link-selected {
+  box-shadow: var(--primary-glow);
+}
+
+/* Headings */
+h1, h2, h3 { letter-spacing: -0.4px; }
+
+/* Metric cards */
+[data-testid="stMetric"] {
+  background: linear-gradient(180deg, var(--panel) 0%, #161922 100%);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 18px;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.18);
+  transition: border-color .15s ease, transform .15s ease;
+}
+[data-testid="stMetric"]:hover {
+  border-color: rgba(0,212,170,0.35);
+  transform: translateY(-1px);
+}
+[data-testid="stMetricLabel"] { color: var(--text-dim) !important; font-weight: 500 !important; }
+[data-testid="stMetricValue"] { font-weight: 700 !important; letter-spacing: -0.5px; }
+
+/* Buttons */
+.stButton > button {
+  border-radius: 10px !important;
+  border: 1px solid var(--border-strong) !important;
+  font-weight: 600 !important;
+  transition: transform .08s ease, box-shadow .15s ease, border-color .15s ease;
+  background: linear-gradient(180deg, #1f2330 0%, #161a23 100%) !important;
+  color: var(--text) !important;
+}
+.stButton > button:hover {
+  transform: translateY(-1px);
+  border-color: var(--primary) !important;
+  box-shadow: var(--primary-glow);
+}
+.stButton > button:active { transform: translateY(0); }
+
+button[kind="primary"] {
+  background: linear-gradient(180deg, var(--primary-2) 0%, var(--primary) 100%) !important;
+  border-color: var(--primary) !important;
+  color: #06231b !important;
+}
+
+/* Inputs */
+[data-baseweb="select"] > div,
+.stTextInput > div > div,
+.stNumberInput > div > div {
+  background: var(--panel) !important;
+  border-radius: 10px !important;
+}
+
+/* Tables */
+.stDataFrame, .stTable {
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+/* Status pill */
+.ab-pill {
+  display: inline-block; padding: 4px 12px; border-radius: 999px;
+  font-weight: 600; font-size: 12px; letter-spacing: .4px;
+  background: var(--panel-2); color: var(--text-dim);
+  border: 1px solid var(--border);
+}
+.ab-pill.good { background: rgba(0,212,170,0.13); color: var(--good); border-color: var(--good); box-shadow: 0 0 12px rgba(0,212,170,.18); }
+.ab-pill.warn { background: rgba(255,182,72,0.13); color: var(--warn); border-color: var(--warn); }
+.ab-pill.bad  { background: rgba(255,93,106,0.13); color: var(--bad);  border-color: var(--bad); }
+
+/* Cards */
+.ab-card {
+  background: linear-gradient(180deg, var(--panel) 0%, #161922 100%);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px 18px;
+  margin-bottom: 12px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.22);
+}
+.ab-card h4 { margin: 0 0 6px 0; color: var(--text); font-weight: 600; }
+.ab-card .sub { color: var(--text-dim); font-size: 12px; }
+
+/* Progress bar */
+.ab-bar { background: var(--panel-2); border-radius: 8px; height: 10px; overflow: hidden; }
+.ab-bar > div { height: 100%; background: linear-gradient(90deg, var(--primary), #00b694); }
+.ab-bar.warn > div { background: linear-gradient(90deg, var(--warn), #ff8b3d); }
+.ab-bar.bad  > div { background: linear-gradient(90deg, var(--bad),  #ff2c45); }
+
+/* Tabs */
+.stTabs [data-baseweb="tab-list"] { gap: 4px; }
+.stTabs [data-baseweb="tab"] {
+  background: transparent; color: var(--text-dim);
+  border-radius: 8px 8px 0 0; padding: 8px 14px;
+}
+.stTabs [aria-selected="true"] {
+  color: var(--primary) !important;
+  background: rgba(0,212,170,0.06) !important;
+  border-bottom: 2px solid var(--primary) !important;
+}
+
+/* Plotly chart wrapper */
+.js-plotly-plot, .stPlotlyChart {
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.01);
+  box-shadow: 0 6px 22px rgba(0,0,0,0.3);
+}
+
+/* Hide Streamlit chrome */
+#MainMenu { visibility: hidden; }
+footer    { visibility: hidden; }
+header[data-testid="stHeader"] { background: transparent; }
+
+/* ===================== MOBILE ===================== */
+@media (max-width: 768px) {
+  .block-container {
+    padding-left: .55rem !important;
+    padding-right: .55rem !important;
+    padding-top: .6rem !important;
+  }
+  [data-testid="stMetric"] { padding: 10px 12px; }
+  [data-testid="stMetricValue"] { font-size: 1.2rem !important; }
+  h1 { font-size: 1.45rem !important; }
+  h2 { font-size: 1.2rem !important; }
+  h3 { font-size: 1.05rem !important; }
+
+  /* Stack column rows on mobile so controls aren't squished */
+  [data-testid="stHorizontalBlock"] {
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+  }
+  [data-testid="stHorizontalBlock"] > [data-testid="column"] {
+    flex: 1 1 100% !important;
+    min-width: 100% !important;
+    width: 100% !important;
+  }
+
+  /* Full-width buttons on mobile */
+  .stButton > button { width: 100% !important; }
+
+  .js-plotly-plot, .stPlotlyChart { border-radius: 10px; }
+  .modebar-container { transform: scale(.85); transform-origin: top right; }
+
+  .stTabs [data-baseweb="tab-list"] {
+    overflow-x: auto;
+    white-space: nowrap;
+    flex-wrap: nowrap !important;
+  }
+
+  section[data-testid="stSidebar"] {
+    width: 82vw !important;
+    min-width: 82vw !important;
+  }
+}
