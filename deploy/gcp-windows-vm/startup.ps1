@@ -7,7 +7,6 @@ param(
     [string]$RepoUrl    = "https://github.com/msovo/alphafx.git",
     [string]$Branch     = "feature/multi-user-platform",
     [string]$InstallDir = "C:\alphabot-fx",
-    [string]$PythonVer  = "3.13.0",
     [string]$GitHubToken = $env:GITHUB_TOKEN
 )
 
@@ -34,11 +33,24 @@ if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
 
 # ---- 2. Core tooling -----------------------------------------------------
 Write-Host "==> Installing git, python, gcloud, nssm"
-choco install -y git python --version=$PythonVer gcloudsdk nssm
+# python313 is the version-pinned Chocolatey package; falls back to latest python if pinned ver missing
+choco install -y git nssm gcloudsdk
+choco install -y python313 --no-progress
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "==> python313 unavailable, installing latest python" -ForegroundColor Yellow
+    choco install -y python --no-progress
+}
 
-# Refresh PATH
+# Refresh PATH from registry (Chocolatey updates Machine PATH but current session needs reload)
 $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + `
             [System.Environment]::GetEnvironmentVariable("Path","User")
+
+# Sanity check before continuing
+foreach ($cmd in @("git","python","nssm")) {
+    if (-not (Get-Command $cmd -ErrorAction SilentlyContinue)) {
+        throw "$cmd not found on PATH after install. Open a NEW PowerShell window and re-run this script."
+    }
+}
 
 # ---- 3. MetaTrader 5 (silent install) ------------------------------------
 $mt5Url = "https://download.mql5.com/cdn/web/metaquotes.software.corp/mt5/mt5setup.exe"
@@ -85,19 +97,29 @@ $svcName  = "AlphaBotFX"
 $venvPy   = "$InstallDir\.venv\Scripts\python.exe"
 $runArgs  = "-m streamlit run dashboard\app.py --server.port=8501 --server.address=0.0.0.0 --server.headless=true"
 
+New-Item -ItemType Directory -Force -Path "$InstallDir\logs" | Out-Null
+
 if (-not (Get-Service -Name $svcName -ErrorAction SilentlyContinue)) {
     Write-Host "==> Installing $svcName Windows service"
-    nssm install $svcName $venvPy $runArgs
-    nssm set     $svcName AppDirectory $InstallDir
-    nssm set     $svcName Start SERVICE_AUTO_START
-    nssm set     $svcName AppStdout "$InstallDir\logs\service-stdout.log"
-    nssm set     $svcName AppStderr "$InstallDir\logs\service-stderr.log"
+    & nssm install $svcName $venvPy $runArgs
+    & nssm set     $svcName AppDirectory $InstallDir
+    & nssm set     $svcName Start SERVICE_AUTO_START
+    & nssm set     $svcName AppStdout "$InstallDir\logs\service-stdout.log"
+    & nssm set     $svcName AppStderr "$InstallDir\logs\service-stderr.log"
 } else {
     Write-Host "==> $svcName service already installed — updating"
-    nssm set     $svcName Application $venvPy
-    nssm set     $svcName AppParameters $runArgs
+    & nssm set     $svcName Application $venvPy
+    & nssm set     $svcName AppParameters $runArgs
 }
-Start-Service $svcName
+
+# Wait briefly for SCM to register, then start
+Start-Sleep -Seconds 2
+$svc = Get-Service -Name $svcName -ErrorAction SilentlyContinue
+if ($svc) {
+    Start-Service -Name $svcName
+} else {
+    Write-Host "WARNING: service $svcName not registered yet. Run 'nssm start $svcName' manually." -ForegroundColor Yellow
+}
 
 # ---- 8. Scheduled auto-update (git pull every 15 min) --------------------
 $updaterPath = "$InstallDir\deploy\gcp-windows-vm\auto-update.ps1"
