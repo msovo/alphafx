@@ -196,5 +196,23 @@ header[data-testid="stHeader"] { background: transparent; }
   section[data-testid="stSidebar"] {
     width: 82vw !important;
     min-width: 82vw !important;
+    max-width: 320px !important;
+    z-index: 100 !important;
+    box-shadow: 8px 0 32px rgba(0,0,0,0.55) !important;
+  }
+  /* Ensure main content uses the full viewport on mobile (no reserved sidebar gutter) */
+  section.main, [data-testid="stAppViewContainer"] > .main {
+    margin-left: 0 !important;
+    width: 100vw !important;
+  }
+  .block-container { max-width: 100vw !important; }
+  /* Make tables horizontally scrollable instead of overflowing the page */
+  [data-testid="stDataFrame"], [data-testid="stTable"] { overflow-x: auto !important; }
+  /* Hamburger always visible & tappable */
+  [data-testid="stSidebarCollapseButton"] {
+    z-index: 101 !important;
+    position: fixed !important;
+    top: 8px !important;
+    left: 8px !important;
   }
 }

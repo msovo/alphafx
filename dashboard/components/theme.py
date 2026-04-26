@@ -20,18 +20,65 @@ def inject_css() -> None:
           if (window.__abMobileNavBound) return;
           window.__abMobileNavBound = true;
           const isMobile = () => window.matchMedia('(max-width: 768px)').matches;
-          function closeSidebar(){
-            const btn =
-              document.querySelector('[data-testid="stSidebarCollapseButton"]') ||
-              document.querySelector('button[kind="headerNoPadding"]') ||
-              document.querySelector('section[data-testid="stSidebar"] button');
-            if (btn) btn.click();
+          function isSidebarOpen(){
+            const sb = document.querySelector('section[data-testid="stSidebar"]');
+            if (!sb) return false;
+            const aria = sb.getAttribute('aria-expanded');
+            if (aria !== null) return aria === 'true';
+            const r = sb.getBoundingClientRect();
+            return r.width > 50 && r.left >= -10;
           }
+          function closeSidebar(){
+            const candidates = [
+              '[data-testid="stSidebarCollapseButton"] button',
+              '[data-testid="stSidebarCollapseButton"]',
+              '[data-testid="collapsedControl"]',
+              'button[kind="headerNoPadding"]',
+              'section[data-testid="stSidebar"] [data-testid="baseButton-headerNoPadding"]',
+              'section[data-testid="stSidebar"] button[aria-label*="ollapse"]',
+              'section[data-testid="stSidebar"] button[aria-label*="lose"]',
+            ];
+            for (const sel of candidates){
+              const el = document.querySelector(sel);
+              if (el){ el.click(); return true; }
+            }
+            return false;
+          }
+          // Close sidebar after any click inside the sidebar nav (option_menu, radio, buttons)
           document.addEventListener('click', (e) => {
             if (!isMobile()) return;
-            const link = e.target.closest('section[data-testid="stSidebar"] .nav-link, section[data-testid="stSidebar"] [role="radio"]');
-            if (link) setTimeout(closeSidebar, 80);
+            const sb = e.target.closest('section[data-testid="stSidebar"]');
+            if (!sb) return;
+            // Ignore clicks on the collapse button itself
+            if (e.target.closest('[data-testid="stSidebarCollapseButton"]')) return;
+            // Detect a navigation/menu item click
+            const navHit = e.target.closest(
+              '.nav-link, [role="radio"], [role="menuitem"], [role="tab"], a, button, label'
+            );
+            if (!navHit) return;
+            // Allow the form/state update to fire first
+            setTimeout(() => { if (isSidebarOpen()) closeSidebar(); }, 120);
           }, true);
+
+          // Backdrop: tap outside the sidebar to close it on mobile
+          function ensureBackdrop(){
+            if (!isMobile()) return;
+            if (!isSidebarOpen()) {
+              const ex = document.getElementById('ab-sb-backdrop');
+              if (ex) ex.remove();
+              return;
+            }
+            if (document.getElementById('ab-sb-backdrop')) return;
+            const bd = document.createElement('div');
+            bd.id = 'ab-sb-backdrop';
+            bd.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;backdrop-filter:blur(2px);';
+            bd.addEventListener('click', () => closeSidebar());
+            document.body.appendChild(bd);
+          }
+          const mo = new MutationObserver(() => ensureBackdrop());
+          mo.observe(document.body, {subtree:true, attributes:true, childList:true});
+          window.addEventListener('resize', ensureBackdrop);
+          setTimeout(ensureBackdrop, 500);
         })();
         </script>
         """,
