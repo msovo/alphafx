@@ -33,12 +33,17 @@ if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
 
 # ---- 2. Core tooling -----------------------------------------------------
 Write-Host "==> Installing git, python, gcloud, nssm"
-# python313 is the version-pinned Chocolatey package; falls back to latest python if pinned ver missing
+# Python 3.12 chosen because MetaTrader5 has stable wheels for it (3.13/3.14 lag)
 choco install -y git nssm gcloudsdk
-choco install -y python313 --no-progress
+choco install -y python312 --no-progress
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "==> python313 unavailable, installing latest python" -ForegroundColor Yellow
-    choco install -y python --no-progress
+    Write-Host "==> python312 install failed, trying python311" -ForegroundColor Yellow
+    choco install -y python311 --no-progress
+}
+# If a newer Python (3.13/3.14) was installed by a prior failed run, prefer the 3.12 launcher
+$py312 = "C:\Python312\python.exe"
+if (Test-Path $py312) {
+    $env:Path = "C:\Python312;C:\Python312\Scripts;" + $env:Path
 }
 
 # Refresh PATH from registry (Chocolatey updates Machine PATH but current session needs reload)
@@ -79,7 +84,11 @@ if (Test-Path $InstallDir) {
 Push-Location $InstallDir
 if (-not (Test-Path ".venv")) {
     Write-Host "==> Creating venv"
-    python -m venv .venv
+    if (Test-Path "C:\Python312\python.exe") {
+        & "C:\Python312\python.exe" -m venv .venv
+    } else {
+        python -m venv .venv
+    }
 }
 & .\.venv\Scripts\python.exe -m pip install --upgrade pip
 & .\.venv\Scripts\python.exe -m pip install -r requirements.txt
