@@ -50,6 +50,10 @@ st.set_page_config(
 inject_css()
 _bootstrap()
 
+# Mount cookie manager BEFORE auth gate so reads/writes work
+from auth.cookies import mount as _mount_cookies
+_mount_cookies()
+
 # ---------------------------------------------------------------------------
 # Auth gate — show login screen if not signed in
 # ---------------------------------------------------------------------------
@@ -88,6 +92,11 @@ if "auth_user_id" not in st.session_state:
     from dashboard.views import _login
     _login.render()
     st.stop()
+
+# After a successful login the cookie was set on the previous run;
+# now finalise by reloading once so the dashboard view takes over.
+if st.session_state.pop("_ab_pending_login_redirect", False):
+    st.rerun()
 
 
 # ---------------------------------------------------------------------------

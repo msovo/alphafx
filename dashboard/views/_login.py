@@ -64,11 +64,21 @@ def _do_login(user, *, remember: bool = False) -> None:
         pass
     if remember:
         try:
-            ua = st.context.headers.get("User-Agent", "")[:120] \
-                if hasattr(st, "context") else ""
+            ua = ""
+            try:
+                ua = (st.context.headers.get("User-Agent", "") or "")[:120]
+            except Exception:                              # noqa: BLE001
+                pass
             tok = create_session_token(user.id, device_label=ua)
-            set_session_cookie(tok)
             st.session_state["_ab_session_token"] = tok
+            # Write the cookie. The CookieManager component must render
+            # this run for the cookie to actually commit, so we set a
+            # one-shot flag and let the next rerun (after the component
+            # has flushed) take the user to the dashboard.
+            set_session_cookie(tok)
+            st.session_state["_ab_pending_login_redirect"] = True
+            st.success("✅ Signed in. Redirecting…")
+            return
         except Exception as exc:                           # noqa: BLE001
             st.warning(f"Could not enable auto-login: {exc}")
     st.rerun()
