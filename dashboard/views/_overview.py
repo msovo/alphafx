@@ -185,7 +185,24 @@ def render() -> None:
     # Broker mode visibility (prevents silent Mock fallback confusion)
     bname = getattr(broker, "name", "unknown").upper()
     if bname == "MOCK":
-        st.warning("Broker mode: MOCK. Orders will not appear in MT5 until MT5 reconnects.")
+        why = getattr(broker, "last_error", None)
+        msg = "Broker mode: MOCK. Orders will not appear in MT5 until MT5 reconnects."
+        if why:
+            msg += f"\nReason: {why}"
+        st.warning(msg)
+        rc1, rc2 = st.columns([1, 3])
+        if rc1.button("🔌 Reconnect MT5", use_container_width=True):
+            try:
+                from core.broker import reset_broker, get_broker
+                reset_broker()
+                b2 = get_broker(force=True)
+                if getattr(b2, "name", "").upper() == "MT5":
+                    st.success("MT5 connected successfully.")
+                else:
+                    st.error(f"Still in MOCK mode. {getattr(b2, 'last_error', 'No reason available')}")
+            except Exception as exc:                       # noqa: BLE001
+                st.error(f"Reconnect failed: {exc}")
+        rc2.caption("Use this after updating MT5 credentials or terminal path.")
     elif info:
         st.caption(f"Broker: {bname} • Account {info.login} @ {info.server} • Account currency: {acct_cur}")
 

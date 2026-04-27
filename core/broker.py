@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+import time
 from typing import Any
 
 import pandas as pd
@@ -94,6 +95,7 @@ class BrokerBase:
     """Abstract broker. Concrete impls: MT5Broker, MockBroker."""
     name: str = "base"
     connected: bool = False
+    last_error: str | None = None
 
     def connect(self) -> bool: ...
     def disconnect(self) -> None: ...
@@ -115,22 +117,31 @@ class MT5Broker(BrokerBase):
 
     def connect(self) -> bool:
         if not HAS_MT5:
-            logger.warning("MetaTrader5 package not available")
+            self.last_error = "MetaTrader5 package not available"
+            logger.warning(self.last_error)
             return False
         s = get_settings()
         kwargs: dict[str, Any] = {}
         if s.mt5_path:
             kwargs["path"] = s.mt5_path
         if not mt5.initialize(**kwargs):                   # type: ignore[attr-defined]
-            logger.error(f"MT5 init failed: {mt5.last_error()}")
+            self.last_error = f"MT5 init failed: {mt5.last_error()}"
+            logger.error(self.last_error)
             return False
         if s.mt5_account and s.mt5_password and s.mt5_server:
             ok = mt5.login(s.mt5_account, password=s.mt5_password, server=s.mt5_server)
             if not ok:
-                logger.error(f"MT5 login failed: {mt5.last_error()}")
+                self.last_error = f"MT5 login failed: {mt5.last_error()}"
+                logger.error(self.last_error)
                 self.disconnect()
                 return False
+        elif s.mt5_account or s.mt5_server:
+            self.last_error = "MT5 credentials incomplete (account/password/server required)"
+            logger.error(self.last_error)
+            self.disconnect()
+            return False
         self.connected = True
+        self.last_error = None
         info = mt5.account_info()
         if info:
             logger.success(f"MT5 connected — {info.login} @ {info.server} (balance={info.balance})")
@@ -312,6 +323,7 @@ class MockBroker(BrokerBase):
         self._next_ticket = 1000000
         self._balance = 10_000.0
         self._equity = 10_000.0
+        self.last_error = None
 
     def connect(self) -> bool:
         self.connected = True
@@ -400,11 +412,24 @@ class MockBroker(BrokerBase):
 # Factory / singleton
 # ---------------------------------------------------------------------------
 _broker: BrokerBase | None = None
+_last_mt5_retry_ts: float = 0.0
 
 
 def get_broker(force: bool = False) -> BrokerBase:
     global _broker
+    global _last_mt5_retry_ts
+
+    # If currently mocked, periodically retry MT5 attach automatically.
     if _broker is not None and not force:
+        if isinstance(_broker, MockBroker) and HAS_MT5:
+            now = time.time()
+            if now - _last_mt5_retry_ts >= 30:
+                _last_mt5_retry_ts = now
+                b_try: BrokerBase = MT5Broker()
+                if b_try.connect():
+                    _broker = b_try
+                    return _broker
+                _broker.last_error = getattr(b_try, "last_error", None)
         return _broker
     if HAS_MT5:
         b: BrokerBase = MT5Broker()
@@ -413,6 +438,10 @@ def get_broker(force: bool = False) -> BrokerBase:
             return _broker
         logger.warning("Falling back to MockBroker after MT5 failure.")
     _broker = MockBroker()
+    if HAS_MT5:
+        _broker.last_error = getattr(locals().get("b", None), "last_error", "MT5 connection failed")
+    else:
+        _broker.last_error = "MetaTrader5 package unavailable in current environment"
     _broker.connect()
     return _broker
 
