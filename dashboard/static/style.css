@@ -367,8 +367,18 @@ button[kind="primary"]:hover, .stButton > button[kind="primary"]:hover {
 }
 
 /* ---------- Hide Streamlit chrome ---------- */
-#MainMenu { visibility: hidden; }
-footer    { visibility: hidden; }
+#MainMenu { visibility: hidden !important; display: none !important; }
+footer    { visibility: hidden !important; display: none !important; }
+[data-testid="stToolbar"]        { display: none !important; }
+[data-testid="stDecoration"]     { display: none !important; }
+[data-testid="stStatusWidget"]   { display: none !important; }
+[data-testid="stMainMenu"]       { display: none !important; }
+[data-testid="stActionButton"]   { display: none !important; }
+.viewerBadge_container__1QSob,
+.viewerBadge_link__1S137,
+.styles_viewerBadge__1yB5_,
+[class*="viewerBadge"]           { display: none !important; }
+a[href*="streamlit.io"]          { display: none !important; }
 header[data-testid="stHeader"] {
   background: transparent;
   backdrop-filter: blur(10px);

@@ -79,6 +79,42 @@ def inject_css() -> None:
           mo.observe(document.body, {subtree:true, attributes:true, childList:true});
           window.addEventListener('resize', ensureBackdrop);
           setTimeout(ensureBackdrop, 500);
+
+          // ---- Rebrand: replace any "Streamlit" / "Running..." text with "AlphaBot FX" ----
+          function rebrand(){
+            try {
+              // Browser tab
+              if (document.title && /streamlit/i.test(document.title)) {
+                document.title = 'AlphaBot FX';
+              }
+              // Toasts / dialogs / status widgets
+              const sel = 'div[role="alert"], div[role="dialog"], [data-testid="stToast"], [data-testid="stStatusWidget"], [data-testid="stConnectionStatus"], .stException, .stAlert';
+              document.querySelectorAll(sel).forEach(node => {
+                if (!node || !node.innerHTML) return;
+                let html = node.innerHTML;
+                let changed = false;
+                // Phrases to rewrite
+                const map = [
+                  [/Streamlit server/gi,                'AlphaBot FX server'],
+                  [/the Streamlit app/gi,               'AlphaBot FX'],
+                  [/Streamlit app/gi,                   'AlphaBot FX'],
+                  [/the server is not responding[^.<]*\.?/gi, 'Reconnecting to AlphaBot FX…'],
+                  [/Connection error[^<]*?try again/gi, 'AlphaBot FX is reconnecting'],
+                  [/Please wait\s*\.{0,3}/gi,           'AlphaBot FX is reconnecting…'],
+                  [/Made with Streamlit/gi,             ''],
+                  [/Streamlit/g,                        'AlphaBot FX'],
+                ];
+                for (const [re, rep] of map){
+                  if (re.test(html)){ html = html.replace(re, rep); changed = true; }
+                }
+                if (changed) node.innerHTML = html;
+              });
+            } catch(e){}
+          }
+          const moBrand = new MutationObserver(rebrand);
+          moBrand.observe(document.body, {subtree:true, childList:true, characterData:true});
+          rebrand();
+          setInterval(rebrand, 1500);
         })();
         </script>
         """,
