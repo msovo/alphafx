@@ -156,23 +156,24 @@ def render() -> None:
         st.warning("Broker offline — connect MT5 (or running in Mock mode).")
 
     # --- KPI cards ----------------------------------------------------------
-    from data.fx_rates import get_rate, fmt_money, display_currency
+    from data.fx_rates import get_rate, fmt_money, fmt_money_from_account, display_currency
     zar_rate = get_rate("USDZAR")
-    equity_usd = info.equity if info else 0.0
-    balance_usd = info.balance if info else 0.0
-    free_usd = info.free_margin if info else 0.0
+    equity = info.equity if info else 0.0
+    balance = info.balance if info else 0.0
+    free = info.free_margin if info else 0.0
+    acct_cur = (getattr(info, "currency", "USD") if info else "USD")
     cur = display_currency()
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric(f"Equity ({cur})", fmt_money(equity_usd),
+    c1.metric(f"Equity ({cur})", fmt_money_from_account(equity, acct_cur),
               f"{fmt_money(state.daily_pnl, signed=True)} today")
-    c2.metric(f"Balance ({cur})", fmt_money(balance_usd))
-    c3.metric(f"Free margin ({cur})", fmt_money(free_usd))
+    c2.metric(f"Balance ({cur})", fmt_money_from_account(balance, acct_cur))
+    c3.metric(f"Free margin ({cur})", fmt_money_from_account(free, acct_cur))
     c4.metric("Open positions", len(positions),
               f"{state.daily_trades} trades today")
 
     # ZAR rate badge
-    if zar_rate and cur == "ZAR":
+    if zar_rate and cur == "ZAR" and acct_cur == "USD":
         st.markdown(
             f"<div class='ab-card' style='padding:8px 14px;margin:4px 0 12px 0;font-size:0.9em'>"
             f"🇿🇦 USD/ZAR <b>{zar_rate:.4f}</b> "
@@ -180,6 +181,13 @@ def render() -> None:
             f"</div>",
             unsafe_allow_html=True,
         )
+
+    # Broker mode visibility (prevents silent Mock fallback confusion)
+    bname = getattr(broker, "name", "unknown").upper()
+    if bname == "MOCK":
+        st.warning("Broker mode: MOCK. Orders will not appear in MT5 until MT5 reconnects.")
+    elif info:
+        st.caption(f"Broker: {bname} • Account {info.login} @ {info.server} • Account currency: {acct_cur}")
 
     # --- DD bars ------------------------------------------------------------
     daily_limit = float(s.get("risk.daily_loss_limit_pct", 5.0))
