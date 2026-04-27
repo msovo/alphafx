@@ -33,6 +33,104 @@ def _close_all() -> None:
     st.toast("All positions closed", icon="✅")
 
 
+def _render_status_hero(state, open_positions: int) -> None:
+    """Big, glanceable banner: is the bot ON or OFF + last activity."""
+    status = (state.status or "stopped").lower()
+    mode = state.mode or "—"
+
+    # Heartbeat → SAST
+    hb_txt = "—"
+    hb_age = "no heartbeat yet"
+    if state.last_heartbeat:
+        try:
+            from datetime import datetime, timezone
+            from utils.helpers import to_sast
+            dt = datetime.fromisoformat(state.last_heartbeat.replace(" ", "T"))
+            hb_txt = to_sast(dt).strftime("%H:%M:%S SAST")
+            secs = (datetime.now(timezone.utc) - dt.astimezone(timezone.utc)).total_seconds()
+            if secs < 60:
+                hb_age = f"{int(secs)}s ago"
+            elif secs < 3600:
+                hb_age = f"{int(secs // 60)}m ago"
+            else:
+                hb_age = f"{int(secs // 3600)}h ago"
+        except Exception:                                  # noqa: BLE001
+            pass
+
+    # Last trade
+    last_trade_txt = "No trades executed yet"
+    try:
+        from journal.analytics import closed_trades
+        df = closed_trades(limit=1)
+        if not df.empty:
+            row = df.iloc[0]
+            pnl = float(row.get("pnl_usd", 0) or 0)
+            pair = row.get("pair", "—")
+            ct = str(row.get("close_time", ""))[:16].replace("T", " ")
+            sign = "+" if pnl >= 0 else ""
+            last_trade_txt = f"{pair} · {sign}{pnl:.2f} USD · {ct}"
+    except Exception:                                      # noqa: BLE001
+        pass
+
+    # Color/label per status
+    palette = {
+        "running":     ("#00d4aa", "BOT RUNNING",   "🟢", "rgba(0,212,170,0.18)"),
+        "paused":      ("#ffd166", "BOT PAUSED",    "🟡", "rgba(255,209,102,0.18)"),
+        "stopped":     ("#ff6b6b", "BOT STOPPED",   "🔴", "rgba(255,107,107,0.18)"),
+        "kill_switch": ("#ff3b3b", "KILL SWITCH",   "🛑", "rgba(255,59,59,0.22)"),
+    }
+    color, label, dot_emoji, glow = palette.get(status, palette["stopped"])
+    pulse = "ab-pulse" if status == "running" else ""
+
+    html = f"""
+    <style>
+      @keyframes ab-pulse-anim {{
+        0% {{ box-shadow: 0 0 0 0 {color}80; }}
+        70% {{ box-shadow: 0 0 0 14px {color}00; }}
+        100% {{ box-shadow: 0 0 0 0 {color}00; }}
+      }}
+      .ab-pulse .ab-status-dot {{ animation: ab-pulse-anim 1.6s infinite; }}
+      .ab-status-hero {{
+        display:flex; flex-wrap:wrap; align-items:center; gap:18px;
+        padding:14px 18px; margin:6px 0 14px 0;
+        border-radius:16px;
+        background: linear-gradient(135deg, {glow}, rgba(255,255,255,0.02));
+        border:1px solid {color}55;
+        backdrop-filter: blur(10px);
+      }}
+      .ab-status-dot {{
+        width:14px; height:14px; border-radius:50%;
+        background:{color}; box-shadow:0 0 12px {color};
+        flex-shrink:0;
+      }}
+      .ab-status-label {{
+        font-weight:800; font-size:1.05rem; letter-spacing:.5px;
+        color:{color}; text-transform:uppercase;
+      }}
+      .ab-status-meta {{
+        display:flex; flex-wrap:wrap; gap:14px; margin-left:auto;
+        font-size:.88rem; color:#cbd2e0;
+      }}
+      .ab-status-meta b {{ color:#fff; font-weight:600; }}
+      .ab-status-meta .sep {{ opacity:.4; }}
+      @media (max-width: 640px) {{
+        .ab-status-meta {{ margin-left:0; width:100%; }}
+      }}
+    </style>
+    <div class="ab-status-hero {pulse}">
+      <span class="ab-status-dot"></span>
+      <span class="ab-status-label">{label}</span>
+      <span class="ab-status-meta">
+        <span>Mode <b>{mode}</b></span><span class="sep">·</span>
+        <span>Open <b>{open_positions}</b></span><span class="sep">·</span>
+        <span>Heartbeat <b>{hb_txt}</b> <span style="opacity:.6">({hb_age})</span></span><span class="sep">·</span>
+        <span>Last trade <b>{last_trade_txt}</b></span>
+      </span>
+    </div>
+    """
+    st.markdown(html, unsafe_allow_html=True)
+
+
 def render() -> None:
     page_header("Overview", "Live account, risk, sessions, and bot controls")
 
@@ -41,6 +139,9 @@ def render() -> None:
     broker = get_broker()
     info = broker.account_info()
     positions = broker.positions()
+
+    # --- Bot status hero banner --------------------------------------------
+    _render_status_hero(state, len(positions))
 
     if info is None:
         st.warning("Broker offline — connect MT5 (or running in Mock mode).")
