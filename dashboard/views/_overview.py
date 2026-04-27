@@ -57,8 +57,8 @@ def _render_status_hero(state, open_positions: int) -> None:
         except Exception:                                  # noqa: BLE001
             pass
 
-    # Last trade
-    last_trade_txt = "No trades executed yet"
+    # Last closed trade (open positions are shown separately)
+    last_trade_txt = "No closed trades yet"
     try:
         from journal.analytics import closed_trades
         df = closed_trades(limit=1)
@@ -69,8 +69,16 @@ def _render_status_hero(state, open_positions: int) -> None:
             ct = str(row.get("close_time", ""))[:16].replace("T", " ")
             sign = "+" if pnl >= 0 else ""
             last_trade_txt = f"{pair} · {sign}{pnl:.2f} USD · {ct}"
+        elif open_positions > 0:
+            last_trade_txt = f"No closed trades yet ({open_positions} open)"
     except Exception:                                      # noqa: BLE001
         pass
+
+    # Scheduler cadence shown in hero for transparency
+    try:
+        scan_every = int(get_settings().get("bot.scan_interval_minutes", 15))
+    except Exception:                                      # noqa: BLE001
+        scan_every = 15
 
     # Color/label per status
     palette = {
@@ -122,6 +130,7 @@ def _render_status_hero(state, open_positions: int) -> None:
       <span class="ab-status-label">{label}</span>
       <span class="ab-status-meta">
         <span>Mode <b>{mode}</b></span><span class="sep">·</span>
+                <span>Auto scan <b>{scan_every}m</b></span><span class="sep">·</span>
         <span>Open <b>{open_positions}</b></span><span class="sep">·</span>
         <span>Heartbeat <b>{hb_txt}</b> <span style="opacity:.6">({hb_age})</span></span><span class="sep">·</span>
         <span>Last trade <b>{last_trade_txt}</b></span>
