@@ -369,7 +369,6 @@ button[kind="primary"]:hover, .stButton > button[kind="primary"]:hover {
 /* ---------- Hide Streamlit chrome ---------- */
 #MainMenu { visibility: hidden !important; display: none !important; }
 footer    { visibility: hidden !important; display: none !important; }
-[data-testid="stToolbar"]        { display: none !important; }
 [data-testid="stDecoration"]     { display: none !important; }
 [data-testid="stStatusWidget"]   { display: none !important; }
 [data-testid="stMainMenu"]       { display: none !important; }
