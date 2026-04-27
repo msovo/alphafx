@@ -371,8 +371,6 @@ button[kind="primary"]:hover, .stButton > button[kind="primary"]:hover {
 footer    { visibility: hidden !important; display: none !important; }
 [data-testid="stDecoration"]     { display: none !important; }
 [data-testid="stStatusWidget"]   { display: none !important; }
-[data-testid="stMainMenu"]       { display: none !important; }
-[data-testid="stActionButton"]   { display: none !important; }
 .viewerBadge_container__1QSob,
 .viewerBadge_link__1S137,
 .styles_viewerBadge__1yB5_,
@@ -381,6 +379,24 @@ a[href*="streamlit.io"]          { display: none !important; }
 header[data-testid="stHeader"] {
   background: transparent;
   backdrop-filter: blur(10px);
+}
+
+/* Keep sidebar toggle controls visible (desktop + mobile) */
+[data-testid="stSidebarCollapseButton"],
+[data-testid="collapsedControl"] {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  z-index: 1200 !important;
+}
+
+@media (min-width: 769px) {
+  [data-testid="stSidebarCollapseButton"],
+  [data-testid="collapsedControl"] {
+    position: fixed !important;
+    top: 10px !important;
+    left: 10px !important;
+  }
 }
 
 /* ---------- Scrollbar ---------- */
