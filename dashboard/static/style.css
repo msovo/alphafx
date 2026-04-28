@@ -381,6 +381,17 @@ header[data-testid="stHeader"] {
   backdrop-filter: blur(10px);
 }
 
+/* Permanent fallback menu button injected by JS */
+#ab-menu-fab {
+  position: fixed !important;
+  top: 8px !important;
+  left: 8px !important;
+  z-index: 2000 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
 /* Keep sidebar toggle controls visible (desktop + mobile) */
 [data-testid="stSidebarCollapseButton"],
 [data-testid="collapsedControl"] {

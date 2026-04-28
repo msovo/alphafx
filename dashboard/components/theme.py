@@ -13,7 +13,7 @@ _JS_HELPERS = r"""
 <script>
 (function(){
   const D = window.parent.document;
-  if (D.__abHelpersBound) return;
+  const alreadyBound = !!D.__abHelpersBound;
   D.__abHelpersBound = true;
 
   const isMobile = () => window.parent.matchMedia('(max-width: 768px)').matches;
@@ -88,15 +88,17 @@ _JS_HELPERS = r"""
   }
 
   // Auto-close sidebar on nav click (mobile)
-  D.addEventListener('click', (e) => {
-    if (!isMobile()) return;
-    const sb = e.target.closest('section[data-testid="stSidebar"]');
-    if (!sb) return;
-    if (e.target.closest('[data-testid="stSidebarCollapseButton"]')) return;
-    const navHit = e.target.closest('.nav-link, [role="radio"], [role="menuitem"], [role="tab"], a, button, label');
-    if (!navHit) return;
-    setTimeout(() => { if (isSidebarOpen()) closeSidebar(); }, 120);
-  }, true);
+  if (!alreadyBound) {
+    D.addEventListener('click', (e) => {
+      if (!isMobile()) return;
+      const sb = e.target.closest('section[data-testid="stSidebar"]');
+      if (!sb) return;
+      if (e.target.closest('[data-testid="stSidebarCollapseButton"]')) return;
+      const navHit = e.target.closest('.nav-link, [role="radio"], [role="menuitem"], [role="tab"], a, button, label');
+      if (!navHit) return;
+      setTimeout(() => { if (isSidebarOpen()) closeSidebar(); }, 120);
+    }, true);
+  }
 
   // Tap-outside backdrop
   function ensureBackdrop(){
@@ -113,9 +115,11 @@ _JS_HELPERS = r"""
     bd.addEventListener('click', () => closeSidebar());
     D.body.appendChild(bd);
   }
-  new MutationObserver(ensureBackdrop).observe(D.body, {subtree:true, attributes:true, childList:true});
-  window.parent.addEventListener('resize', ensureBackdrop);
-  setTimeout(ensureBackdrop, 500);
+  if (!alreadyBound) {
+    new MutationObserver(ensureBackdrop).observe(D.body, {subtree:true, attributes:true, childList:true});
+    window.parent.addEventListener('resize', ensureBackdrop);
+    setTimeout(ensureBackdrop, 500);
+  }
   setTimeout(ensureMenuFab, 100);
 
   // Rebrand: hide "Streamlit" / connection toasts
@@ -143,9 +147,14 @@ _JS_HELPERS = r"""
       });
     } catch(e){}
   }
-  new MutationObserver(() => { rebrand(); ensureMenuFab(); }).observe(D.body, {subtree:true, childList:true, characterData:true});
+  if (!alreadyBound) {
+    new MutationObserver(() => { rebrand(); ensureMenuFab(); }).observe(D.body, {subtree:true, childList:true, characterData:true});
+  }
   rebrand();
-  setInterval(() => { rebrand(); ensureMenuFab(); }, 1500);
+  if (!alreadyBound) {
+    setInterval(() => { rebrand(); ensureMenuFab(); }, 1500);
+  }
+  ensureMenuFab();
 })();
 </script>
 """

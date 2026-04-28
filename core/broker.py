@@ -11,6 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
+import subprocess
+import sys
 import time
 from typing import Any
 
@@ -117,6 +119,67 @@ class MT5Broker(BrokerBase):
     name = "mt5"
 
     @staticmethod
+    def _last_error_tuple() -> tuple[int | None, str]:
+        """Normalize MetaTrader5 last_error() into (code, message)."""
+        try:
+            err = mt5.last_error()  # type: ignore[attr-defined]
+            if isinstance(err, tuple) and len(err) >= 2:
+                return int(err[0]), str(err[1])
+            return None, str(err)
+        except Exception:                                  # noqa: BLE001
+            return None, "unknown MT5 error"
+
+    @staticmethod
+    def _launch_terminal(path: str) -> None:
+        """Best-effort terminal bootstrap for IPC attach scenarios."""
+        if sys.platform != "win32":
+            return
+        try:
+            subprocess.Popen([path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)  # noqa: S603
+        except Exception:                              # noqa: BLE001
+            pass
+
+    def _initialize_with_recovery(self, kwargs: dict[str, Any]) -> bool:
+        """Initialize MT5 and recover from common IPC timeout cases."""
+        init_kwargs = dict(kwargs)
+        init_kwargs.setdefault("timeout", 60_000)
+        if mt5.initialize(**init_kwargs):              # type: ignore[attr-defined]
+            return True
+
+        code, msg = self._last_error_tuple()
+        if code != -10005:
+            return False
+
+        # IPC timeout: clean shutdown, attempt terminal launch, then retry.
+        try:
+            mt5.shutdown()
+        except Exception:                              # noqa: BLE001
+            pass
+
+        term_path = kwargs.get("path")
+        if isinstance(term_path, str) and term_path:
+            self._launch_terminal(term_path)
+        time.sleep(3)
+
+        retry_kwargs = dict(kwargs)
+        retry_kwargs.setdefault("timeout", 120_000)
+        if mt5.initialize(**retry_kwargs):             # type: ignore[attr-defined]
+            return True
+
+        # Final retry in portable mode for terminals installed that way.
+        if "portable" not in kwargs:
+            portable_kwargs = dict(retry_kwargs)
+            portable_kwargs["portable"] = True
+            if mt5.initialize(**portable_kwargs):      # type: ignore[attr-defined]
+                return True
+
+        self.last_error = (
+            f"MT5 init failed ({kwargs.get('path') or '<auto>'}): ({code}, '{msg}'). "
+            "IPC timeout: ensure terminal is running under the same Windows user session as AlphaBot service."
+        )
+        return False
+
+    @staticmethod
     def _detect_terminal_path() -> str | None:
         """Best-effort discovery of terminal64.exe on Windows hosts."""
         candidates = [
@@ -153,9 +216,10 @@ class MT5Broker(BrokerBase):
         elif detected_path:
             kwargs["path"] = detected_path
 
-        if not mt5.initialize(**kwargs):                   # type: ignore[attr-defined]
+        if not self._initialize_with_recovery(kwargs):
             path_note = kwargs.get("path") or "<auto>"
-            self.last_error = f"MT5 init failed ({path_note}): {mt5.last_error()}"
+            if not self.last_error:
+                self.last_error = f"MT5 init failed ({path_note}): {mt5.last_error()}"
             logger.error(self.last_error)
             return False
         if s.mt5_account and s.mt5_password and s.mt5_server:
