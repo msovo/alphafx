@@ -41,6 +41,52 @@ _JS_HELPERS = r"""
     return false;
   }
 
+  function toggleSidebar(){
+    const candidates = [
+      '[data-testid="stSidebarCollapseButton"] button',
+      '[data-testid="stSidebarCollapseButton"]',
+      '[data-testid="collapsedControl"]',
+      'button[kind="headerNoPadding"]',
+      'section[data-testid="stSidebar"] button[aria-label*="ollapse"]',
+      'section[data-testid="stSidebar"] button[aria-label*="lose"]',
+      'button[aria-label*="Sidebar"]',
+    ];
+    for (const sel of candidates){
+      const el = D.querySelector(sel);
+      if (el){ el.click(); return true; }
+    }
+    return false;
+  }
+
+  function ensureMenuFab(){
+    let fab = D.getElementById('ab-menu-fab');
+    if (!fab){
+      fab = D.createElement('button');
+      fab.id = 'ab-menu-fab';
+      fab.type = 'button';
+      fab.setAttribute('aria-label', 'Toggle menu');
+      fab.innerText = '☰';
+      fab.style.cssText = [
+        'position:fixed',
+        'top:8px',
+        'left:8px',
+        'z-index:1400',
+        'width:34px',
+        'height:34px',
+        'border-radius:10px',
+        'border:1px solid rgba(0,212,170,.45)',
+        'background:rgba(10,14,26,.88)',
+        'color:#00d4aa',
+        'font-size:18px',
+        'line-height:30px',
+        'cursor:pointer',
+        'box-shadow:0 8px 20px rgba(0,0,0,.35)',
+      ].join(';');
+      fab.addEventListener('click', () => toggleSidebar());
+      D.body.appendChild(fab);
+    }
+  }
+
   // Auto-close sidebar on nav click (mobile)
   D.addEventListener('click', (e) => {
     if (!isMobile()) return;
@@ -70,6 +116,7 @@ _JS_HELPERS = r"""
   new MutationObserver(ensureBackdrop).observe(D.body, {subtree:true, attributes:true, childList:true});
   window.parent.addEventListener('resize', ensureBackdrop);
   setTimeout(ensureBackdrop, 500);
+  setTimeout(ensureMenuFab, 100);
 
   // Rebrand: hide "Streamlit" / connection toasts
   function rebrand(){
@@ -96,9 +143,9 @@ _JS_HELPERS = r"""
       });
     } catch(e){}
   }
-  new MutationObserver(rebrand).observe(D.body, {subtree:true, childList:true, characterData:true});
+  new MutationObserver(() => { rebrand(); ensureMenuFab(); }).observe(D.body, {subtree:true, childList:true, characterData:true});
   rebrand();
-  setInterval(rebrand, 1500);
+  setInterval(() => { rebrand(); ensureMenuFab(); }, 1500);
 })();
 </script>
 """

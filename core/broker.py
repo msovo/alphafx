@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from pathlib import Path
 import time
 from typing import Any
 
@@ -115,6 +116,29 @@ class BrokerBase:
 class MT5Broker(BrokerBase):
     name = "mt5"
 
+    @staticmethod
+    def _detect_terminal_path() -> str | None:
+        """Best-effort discovery of terminal64.exe on Windows hosts."""
+        candidates = [
+            Path(r"C:\Program Files\MetaTrader 5\terminal64.exe"),
+            Path(r"C:\Program Files (x86)\MetaTrader 5\terminal64.exe"),
+        ]
+        for base in (Path(r"C:\Program Files"), Path(r"C:\Program Files (x86)")):
+            if not base.exists():
+                continue
+            for pat in ("MetaTrader*\\terminal64.exe", "*MetaTrader*\\terminal64.exe"):
+                try:
+                    candidates.extend(base.glob(pat))
+                except Exception:                          # noqa: BLE001
+                    pass
+        for p in candidates:
+            try:
+                if p and p.exists():
+                    return str(p)
+            except Exception:                              # noqa: BLE001
+                continue
+        return None
+
     def connect(self) -> bool:
         if not HAS_MT5:
             self.last_error = "MetaTrader5 package not available"
@@ -122,10 +146,16 @@ class MT5Broker(BrokerBase):
             return False
         s = get_settings()
         kwargs: dict[str, Any] = {}
-        if s.mt5_path:
-            kwargs["path"] = s.mt5_path
+        explicit_path = (s.mt5_path or "").strip() if s.mt5_path else ""
+        detected_path = self._detect_terminal_path() if not explicit_path else None
+        if explicit_path:
+            kwargs["path"] = explicit_path
+        elif detected_path:
+            kwargs["path"] = detected_path
+
         if not mt5.initialize(**kwargs):                   # type: ignore[attr-defined]
-            self.last_error = f"MT5 init failed: {mt5.last_error()}"
+            path_note = kwargs.get("path") or "<auto>"
+            self.last_error = f"MT5 init failed ({path_note}): {mt5.last_error()}"
             logger.error(self.last_error)
             return False
         if s.mt5_account and s.mt5_password and s.mt5_server:
