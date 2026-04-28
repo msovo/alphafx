@@ -193,7 +193,7 @@ def render() -> None:
         rc1, rc2 = st.columns([1, 3])
         if rc1.button("🔌 Reconnect MT5", use_container_width=True):
             try:
-                from core.broker import reset_broker, get_broker
+                from core.broker import reset_broker
                 reset_broker()
                 b2 = get_broker(force=True)
                 if getattr(b2, "name", "").upper() == "MT5":
