@@ -25,10 +25,7 @@ def main() -> int:
     logger.info(f"AlphaBot FX starting — env={s.app_env}")
     init_db()
     broker = get_broker()
-    if not broker.connected:
-        logger.error("Broker connection failed; aborting")
-        return 1
-
+    logger.info(f"Broker mode: {broker.name} (MT5 connect runs in background if needed)")
     scheduler = get_scheduler()
     scheduler.start()
     state = get_state()

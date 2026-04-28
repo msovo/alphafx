@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
+import threading
 import subprocess
 import sys
 import time
@@ -142,7 +143,7 @@ class MT5Broker(BrokerBase):
     def _initialize_with_recovery(self, kwargs: dict[str, Any]) -> bool:
         """Initialize MT5 and recover from common IPC timeout cases."""
         init_kwargs = dict(kwargs)
-        init_kwargs.setdefault("timeout", 60_000)
+        init_kwargs.setdefault("timeout", 8_000)
         if mt5.initialize(**init_kwargs):              # type: ignore[attr-defined]
             return True
 
@@ -158,20 +159,13 @@ class MT5Broker(BrokerBase):
 
         term_path = kwargs.get("path")
         if isinstance(term_path, str) and term_path:
-            self._launch_terminal(term_path)
-        time.sleep(3)
+            threading.Thread(target=self._launch_terminal, args=(term_path,), daemon=True).start()
+            time.sleep(2)  # brief wait for terminal to start
 
         retry_kwargs = dict(kwargs)
-        retry_kwargs.setdefault("timeout", 120_000)
+        retry_kwargs.setdefault("timeout", 12_000)
         if mt5.initialize(**retry_kwargs):             # type: ignore[attr-defined]
             return True
-
-        # Final retry in portable mode for terminals installed that way.
-        if "portable" not in kwargs:
-            portable_kwargs = dict(retry_kwargs)
-            portable_kwargs["portable"] = True
-            if mt5.initialize(**portable_kwargs):      # type: ignore[attr-defined]
-                return True
 
         self.last_error = (
             f"MT5 init failed ({kwargs.get('path') or '<auto>'}): ({code}, '{msg}'). "
@@ -507,46 +501,63 @@ class MockBroker(BrokerBase):
 # ---------------------------------------------------------------------------
 _broker: BrokerBase | None = None
 _last_mt5_retry_ts: float = 0.0
+_mt5_connecting: bool = False
 
 
 def get_broker(force: bool = False) -> BrokerBase:
     global _broker
     global _last_mt5_retry_ts
+    global _mt5_connecting
 
-    # If currently mocked, periodically retry MT5 attach automatically.
-    if _broker is not None and not force:
-        if isinstance(_broker, MockBroker) and HAS_MT5:
-            now = time.time()
-            if now - _last_mt5_retry_ts >= 30:
-                _last_mt5_retry_ts = now
-                b_try: BrokerBase = MT5Broker()
-                if b_try.connect():
-                    _broker = b_try
-                    return _broker
-                _broker.last_error = getattr(b_try, "last_error", None)
-        return _broker
-    if HAS_MT5:
+    # Always return immediately: if not yet initialized, spin up mock and
+    # attempt MT5 in a background thread so the render path never blocks.
+    if _broker is None or force:
+        # Seed mock immediately so callers never wait.
+        _broker.last_error = "MetaTrader5 package unavailable in current environment"
+        _broker = MockBroker()
+        _broker.last_error = "MetaTrader5 package unavailable in current environment"
+        _broker.connect()
+        if HAS_MT5 and not _mt5_connecting:
+            _mt5_connecting = True
+            threading.Thread(target=_bg_mt5_connect, daemon=True).start()
+
+    elif isinstance(_broker, MockBroker) and HAS_MT5 and not _mt5_connecting:
+        now = time.time()
+        if now - _last_mt5_retry_ts >= 30:
+            _last_mt5_retry_ts = now
+            _mt5_connecting = True
+            threading.Thread(target=_bg_mt5_connect, daemon=True).start()
+
+    return _broker
+
+
+def _bg_mt5_connect() -> None:
+    """Background MT5 connection attempt — never blocks the render thread."""
+    global _broker, _mt5_connecting, _last_mt5_retry_ts
+    try:
         b: BrokerBase = MT5Broker()
         if b.connect():
             _broker = b
-            return _broker
-        logger.warning("Falling back to MockBroker after MT5 failure.")
-    _broker = MockBroker()
-    if HAS_MT5:
-        _broker.last_error = getattr(locals().get("b", None), "last_error", "MT5 connection failed")
-    else:
-        _broker.last_error = "MetaTrader5 package unavailable in current environment"
-    _broker.connect()
-    return _broker
+            logger.success("MT5 connected in background thread.")
+        else:
+            if _broker is not None:
+                _broker.last_error = getattr(b, "last_error", "MT5 connection failed")
+            logger.warning(f"Background MT5 connect failed: {getattr(b, 'last_error', '')}")
+    except Exception as exc:                               # noqa: BLE001
+        logger.error(f"Background MT5 connect exception: {exc}")
+    finally:
+        _mt5_connecting = False
+        _last_mt5_retry_ts = time.time()
 
 
 def reset_broker() -> None:
     """Drop cached broker so the next get_broker() rebuilds it
     (e.g. after switching active user / changing MT5 credentials)."""
-    global _broker
+    global _broker, _mt5_connecting
     try:
         if _broker is not None and hasattr(_broker, "disconnect"):
             _broker.disconnect()
     except Exception:                                      # noqa: BLE001
         pass
     _broker = None
+    _mt5_connecting = False
