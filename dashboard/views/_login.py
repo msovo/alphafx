@@ -5,7 +5,14 @@ import importlib
 
 import streamlit as st
 
-from auth.users import authenticate, has_any_users, init_auth_db, register
+from auth.users import (
+    authenticate,
+    create_session_token,
+    has_any_users,
+    init_auth_db,
+    register,
+)
+from auth.cookies import set_session_cookie
 
 
 # ---------------------------------------------------------------------------
@@ -38,7 +45,7 @@ def _switch_active_user(user_id: int) -> None:
                    "Please restart the app.")
 
 
-def _do_login(user) -> None:
+def _do_login(user, *, remember: bool = False) -> None:
     st.session_state["auth_user_id"] = user.id
     st.session_state["auth_username"] = user.username
     st.session_state["auth_role"] = user.role
@@ -51,9 +58,29 @@ def _do_login(user) -> None:
     try:
         from journal.db import init_db, log_audit
         init_db()
-        log_audit("login", actor=user.username)
+        log_audit("login", actor=user.username,
+                  meta={"remember": bool(remember)})
     except Exception:                                      # noqa: BLE001
         pass
+    if remember:
+        try:
+            ua = ""
+            try:
+                ua = (st.context.headers.get("User-Agent", "") or "")[:120]
+            except Exception:                              # noqa: BLE001
+                pass
+            tok = create_session_token(user.id, device_label=ua)
+            st.session_state["_ab_session_token"] = tok
+            # Write the cookie. The CookieManager component must render
+            # this run for the cookie to actually commit, so we set a
+            # one-shot flag and let the next rerun (after the component
+            # has flushed) take the user to the dashboard.
+            set_session_cookie(tok)
+            st.session_state["_ab_pending_login_redirect"] = True
+            st.success("✅ Signed in. Redirecting…")
+            return
+        except Exception as exc:                           # noqa: BLE001
+            st.warning(f"Could not enable auto-login: {exc}")
     st.rerun()
 
 
@@ -213,6 +240,10 @@ def render() -> None:
                                   placeholder="your username")
                 p = st.text_input("Password", type="password", key="login_p",
                                   placeholder="••••••••")
+                remember = st.checkbox(
+                    "🔒 Keep me signed in on this device (30 days)",
+                    value=True, key="login_remember",
+                )
                 submitted = st.form_submit_button(
                     "Sign in →", type="primary", use_container_width=True
                 )
@@ -224,7 +255,7 @@ def render() -> None:
                     if user is None:
                         st.error("Invalid credentials or account inactive.")
                     else:
-                        _do_login(user)
+                        _do_login(user, remember=remember)
 
         # ---- Register -----------------------------------------------------
         with tab_register:
@@ -254,7 +285,7 @@ def render() -> None:
                         user = register(u, p1, email=e or None,
                                         full_name=fn or None, role=role)
                         st.success(f"Account '{user.username}' created.")
-                        _do_login(user)
+                        _do_login(user, remember=True)
                     except ValueError as ex:
                         st.error(str(ex))
 

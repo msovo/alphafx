@@ -61,6 +61,20 @@ _SCHEMA = [
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)",
+    """
+    CREATE TABLE IF NOT EXISTS auth_tokens (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        token_hash TEXT UNIQUE NOT NULL,
+        device_label TEXT,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        last_used_at TEXT,
+        FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_tokens_hash ON auth_tokens(token_hash)",
+    "CREATE INDEX IF NOT EXISTS idx_tokens_user ON auth_tokens(user_id)",
 ]
 
 
@@ -298,3 +312,99 @@ def delete_user(user_id: int, *, wipe_data: bool = False) -> None:
         if d.exists():
             shutil.rmtree(d, ignore_errors=True)
     logger.info(f"User {user_id} deleted (wipe_data={wipe_data})")
+
+
+# ---------------------------------------------------------------------------
+# Persistent device sessions ("Remember me on this device")
+# ---------------------------------------------------------------------------
+import datetime as _dt
+
+_TOKEN_TTL_DAYS = 30
+
+
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def create_session_token(user_id: int, *, device_label: str | None = None,
+                         ttl_days: int = _TOKEN_TTL_DAYS) -> str:
+    """Create a persistent session token. Returns the *plain* token (only ever
+    seen here). Only the SHA-256 hash is stored, so DB compromise can't
+    recover the cookie."""
+    init_auth_db()
+    token = secrets.token_urlsafe(48)
+    now = _dt.datetime.utcnow()
+    exp = now + _dt.timedelta(days=ttl_days)
+    with _conn() as c:
+        c.execute(
+            "INSERT INTO auth_tokens (user_id, token_hash, device_label, "
+            "created_at, expires_at) VALUES (?, ?, ?, ?, ?)",
+            (user_id, _hash_token(token),
+             (device_label or "")[:120],
+             now.isoformat(timespec="seconds") + "Z",
+             exp.isoformat(timespec="seconds") + "Z"),
+        )
+    logger.info(f"Persistent token issued for user {user_id} (ttl={ttl_days}d)")
+    return token
+
+
+def verify_session_token(token: str | None) -> Optional[User]:
+    """Validate a token, refresh `last_used_at`, return the user (or None)."""
+    if not token:
+        return None
+    init_auth_db()
+    th = _hash_token(token)
+    now = _dt.datetime.utcnow()
+    with _conn() as c:
+        row = c.execute(
+            "SELECT t.user_id, t.expires_at FROM auth_tokens t "
+            "JOIN users u ON u.id = t.user_id "
+            "WHERE t.token_hash = ? AND u.active = 1", (th,)
+        ).fetchone()
+        if not row:
+            return None
+        try:
+            exp = _dt.datetime.fromisoformat(row["expires_at"].rstrip("Z"))
+        except Exception:                                   # noqa: BLE001
+            return None
+        if exp < now:
+            c.execute("DELETE FROM auth_tokens WHERE token_hash = ?", (th,))
+            return None
+        c.execute(
+            "UPDATE auth_tokens SET last_used_at = ? WHERE token_hash = ?",
+            (now.isoformat(timespec="seconds") + "Z", th),
+        )
+        urow = c.execute("SELECT * FROM users WHERE id = ?",
+                         (row["user_id"],)).fetchone()
+    return User._from_row(urow) if urow else None
+
+
+def revoke_session_token(token: str | None) -> None:
+    if not token:
+        return
+    with _conn() as c:
+        c.execute("DELETE FROM auth_tokens WHERE token_hash = ?",
+                  (_hash_token(token),))
+
+
+def revoke_all_user_tokens(user_id: int) -> None:
+    with _conn() as c:
+        c.execute("DELETE FROM auth_tokens WHERE user_id = ?", (user_id,))
+    logger.info(f"All persistent tokens revoked for user {user_id}")
+
+
+def list_user_tokens(user_id: int) -> list[dict]:
+    with _conn() as c:
+        rows = c.execute(
+            "SELECT id, device_label, created_at, expires_at, last_used_at "
+            "FROM auth_tokens WHERE user_id = ? ORDER BY created_at DESC",
+            (user_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def purge_expired_tokens() -> int:
+    now = _dt.datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    with _conn() as c:
+        cur = c.execute("DELETE FROM auth_tokens WHERE expires_at < ?", (now,))
+    return cur.rowcount or 0

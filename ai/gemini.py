@@ -16,7 +16,7 @@ import re
 import time
 from typing import Any
 
-from ai.prompts import SYSTEM_PROMPT, build_decision_prompt
+from ai.prompts import SYSTEM_PROMPT, build_decision_prompt, build_system_prompt
 from config.settings import get_settings
 from core.broker import get_broker
 from core.state import get_state
@@ -110,6 +110,14 @@ def _build_context(signal: dict) -> dict[str, Any]:
             "daily_loss_limit_pct": s.get("prop_firm.daily_loss_limit_pct", 5.0),
             "max_drawdown_pct": s.get("prop_firm.max_drawdown_pct", 10.0),
         },
+        "strategy_rules": {
+            "min_confluence_score": s.get("strategy.min_confluence_score", 60),
+            "min_rr": s.get("strategy.min_rr", 2.0),
+        },
+        "ai_rules": {
+            "ml_probability_threshold": s.get("ai.ml_probability_threshold", 0.55),
+            "confidence_threshold": s.get("ai.confidence_threshold", 65),
+        },
     }
 
 
@@ -178,8 +186,9 @@ def _generate(model_name: str, system_instruction: str, prompt: str,
 def evaluate_signal(signal: dict[str, Any]) -> dict[str, Any]:
     s = get_settings()
     model_name = s.gemini_model
-    prompt = build_decision_prompt(signal, _build_context(signal))
-    system = s.get("ai.system_prompt_override") or SYSTEM_PROMPT
+    context = _build_context(signal)
+    prompt = build_decision_prompt(signal, context)
+    system = s.get("ai.system_prompt_override") or build_system_prompt(context)
 
     start = time.time()
     text, err = _generate(

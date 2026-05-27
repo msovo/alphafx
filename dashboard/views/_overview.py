@@ -33,6 +33,113 @@ def _close_all() -> None:
     st.toast("All positions closed", icon="✅")
 
 
+def _render_status_hero(state, open_positions: int) -> None:
+    """Big, glanceable banner: is the bot ON or OFF + last activity."""
+    status = (state.status or "stopped").lower()
+    mode = state.mode or "—"
+
+    # Heartbeat → SAST
+    hb_txt = "—"
+    hb_age = "no heartbeat yet"
+    if state.last_heartbeat:
+        try:
+            from datetime import datetime, timezone
+            from utils.helpers import to_sast
+            dt = datetime.fromisoformat(state.last_heartbeat.replace(" ", "T"))
+            hb_txt = to_sast(dt).strftime("%H:%M:%S SAST")
+            secs = (datetime.now(timezone.utc) - dt.astimezone(timezone.utc)).total_seconds()
+            if secs < 60:
+                hb_age = f"{int(secs)}s ago"
+            elif secs < 3600:
+                hb_age = f"{int(secs // 60)}m ago"
+            else:
+                hb_age = f"{int(secs // 3600)}h ago"
+        except Exception:                                  # noqa: BLE001
+            pass
+
+    # Last closed trade (open positions are shown separately)
+    last_trade_txt = "No closed trades yet"
+    try:
+        from journal.analytics import closed_trades
+        df = closed_trades(limit=1)
+        if not df.empty:
+            row = df.iloc[0]
+            pnl = float(row.get("pnl_usd", 0) or 0)
+            pair = row.get("pair", "—")
+            ct = str(row.get("close_time", ""))[:16].replace("T", " ")
+            sign = "+" if pnl >= 0 else ""
+            last_trade_txt = f"{pair} · {sign}{pnl:.2f} USD · {ct}"
+        elif open_positions > 0:
+            last_trade_txt = f"No closed trades yet ({open_positions} open)"
+    except Exception:                                      # noqa: BLE001
+        pass
+
+    # Scheduler cadence shown in hero for transparency
+    try:
+        scan_every = int(get_settings().get("bot.scan_interval_minutes", 15))
+    except Exception:                                      # noqa: BLE001
+        scan_every = 15
+
+    # Color/label per status
+    palette = {
+        "running":     ("#00d4aa", "BOT RUNNING",   "🟢", "rgba(0,212,170,0.18)"),
+        "paused":      ("#ffd166", "BOT PAUSED",    "🟡", "rgba(255,209,102,0.18)"),
+        "stopped":     ("#ff6b6b", "BOT STOPPED",   "🔴", "rgba(255,107,107,0.18)"),
+        "kill_switch": ("#ff3b3b", "KILL SWITCH",   "🛑", "rgba(255,59,59,0.22)"),
+    }
+    color, label, dot_emoji, glow = palette.get(status, palette["stopped"])
+    pulse = "ab-pulse" if status == "running" else ""
+
+    html = f"""
+    <style>
+      @keyframes ab-pulse-anim {{
+        0% {{ box-shadow: 0 0 0 0 {color}80; }}
+        70% {{ box-shadow: 0 0 0 14px {color}00; }}
+        100% {{ box-shadow: 0 0 0 0 {color}00; }}
+      }}
+      .ab-pulse .ab-status-dot {{ animation: ab-pulse-anim 1.6s infinite; }}
+      .ab-status-hero {{
+        display:flex; flex-wrap:wrap; align-items:center; gap:18px;
+        padding:14px 18px; margin:6px 0 14px 0;
+        border-radius:16px;
+        background: linear-gradient(135deg, {glow}, rgba(255,255,255,0.02));
+        border:1px solid {color}55;
+        backdrop-filter: blur(10px);
+      }}
+      .ab-status-dot {{
+        width:14px; height:14px; border-radius:50%;
+        background:{color}; box-shadow:0 0 12px {color};
+        flex-shrink:0;
+      }}
+      .ab-status-label {{
+        font-weight:800; font-size:1.05rem; letter-spacing:.5px;
+        color:{color}; text-transform:uppercase;
+      }}
+      .ab-status-meta {{
+        display:flex; flex-wrap:wrap; gap:14px; margin-left:auto;
+        font-size:.88rem; color:#cbd2e0;
+      }}
+      .ab-status-meta b {{ color:#fff; font-weight:600; }}
+      .ab-status-meta .sep {{ opacity:.4; }}
+      @media (max-width: 640px) {{
+        .ab-status-meta {{ margin-left:0; width:100%; }}
+      }}
+    </style>
+    <div class="ab-status-hero {pulse}">
+      <span class="ab-status-dot"></span>
+      <span class="ab-status-label">{label}</span>
+      <span class="ab-status-meta">
+        <span>Mode <b>{mode}</b></span><span class="sep">·</span>
+                <span>Auto scan <b>{scan_every}m</b></span><span class="sep">·</span>
+        <span>Open <b>{open_positions}</b></span><span class="sep">·</span>
+        <span>Heartbeat <b>{hb_txt}</b> <span style="opacity:.6">({hb_age})</span></span><span class="sep">·</span>
+        <span>Last trade <b>{last_trade_txt}</b></span>
+      </span>
+    </div>
+    """
+    st.markdown(html, unsafe_allow_html=True)
+
+
 def render() -> None:
     page_header("Overview", "Live account, risk, sessions, and bot controls")
 
@@ -42,6 +149,9 @@ def render() -> None:
     info = broker.account_info()
     positions = broker.positions()
 
+    # --- Bot status hero banner --------------------------------------------
+    _render_status_hero(state, len(positions))
+
     if info is None:
         if broker.name == "mock":
             st.info("Running on **MockBroker** (yfinance). Account metrics below are simulated.", icon="ℹ️")
@@ -49,23 +159,24 @@ def render() -> None:
             st.error("MT5 broker connected but account_info() returned None. Check terminal login.", icon="🔴")
 
     # --- KPI cards ----------------------------------------------------------
-    from data.fx_rates import get_rate, fmt_money, display_currency
+    from data.fx_rates import get_rate, fmt_money, fmt_money_from_account, display_currency
     zar_rate = get_rate("USDZAR")
-    equity_usd = info.equity if info else 0.0
-    balance_usd = info.balance if info else 0.0
-    free_usd = info.free_margin if info else 0.0
+    equity = info.equity if info else 0.0
+    balance = info.balance if info else 0.0
+    free = info.free_margin if info else 0.0
+    acct_cur = (getattr(info, "currency", "USD") if info else "USD")
     cur = display_currency()
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric(f"Equity ({cur})", fmt_money(equity_usd),
+    c1.metric(f"Equity ({cur})", fmt_money_from_account(equity, acct_cur),
               f"{fmt_money(state.daily_pnl, signed=True)} today")
-    c2.metric(f"Balance ({cur})", fmt_money(balance_usd))
-    c3.metric(f"Free margin ({cur})", fmt_money(free_usd))
+    c2.metric(f"Balance ({cur})", fmt_money_from_account(balance, acct_cur))
+    c3.metric(f"Free margin ({cur})", fmt_money_from_account(free, acct_cur))
     c4.metric("Open positions", len(positions),
               f"{state.daily_trades} trades today")
 
     # ZAR rate badge
-    if zar_rate and cur == "ZAR":
+    if zar_rate and cur == "ZAR" and acct_cur == "USD":
         st.markdown(
             f"<div class='ab-card' style='padding:8px 14px;margin:4px 0 12px 0;font-size:0.9em'>"
             f"🇿🇦 USD/ZAR <b>{zar_rate:.4f}</b> "
@@ -73,6 +184,30 @@ def render() -> None:
             f"</div>",
             unsafe_allow_html=True,
         )
+
+    # Broker mode visibility (prevents silent Mock fallback confusion)
+    bname = getattr(broker, "name", "unknown").upper()
+    if bname == "MOCK":
+        why = getattr(broker, "last_error", None)
+        msg = "Broker mode: MOCK. Orders will not appear in MT5 until MT5 reconnects."
+        if why:
+            msg += f"\nReason: {why}"
+        st.warning(msg)
+        rc1, rc2 = st.columns([1, 3])
+        if rc1.button("🔌 Reconnect MT5", use_container_width=True):
+            try:
+                from core.broker import reset_broker
+                reset_broker()
+                b2 = get_broker(force=True)
+                if getattr(b2, "name", "").upper() == "MT5":
+                    st.success("MT5 connected successfully.")
+                else:
+                    st.error(f"Still in MOCK mode. {getattr(b2, 'last_error', 'No reason available')}")
+            except Exception as exc:                       # noqa: BLE001
+                st.error(f"Reconnect failed: {exc}")
+        rc2.caption("Use this after updating MT5 credentials or terminal path.")
+    elif info:
+        st.caption(f"Broker: {bname} • Account {info.login} @ {info.server} • Account currency: {acct_cur}")
 
     # --- DD bars ------------------------------------------------------------
     daily_limit = float(s.get("risk.daily_loss_limit_pct", 5.0))

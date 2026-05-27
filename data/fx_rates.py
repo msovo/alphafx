@@ -67,6 +67,33 @@ def fmt_money(amount_usd: float, *, signed: bool = False) -> str:
     return f"{sign}${amount_usd:,.2f}"
 
 
+def fmt_money_from_account(amount: float, account_currency: str | None, *, signed: bool = False) -> str:
+    """Format amount using account currency -> selected UI currency conversion.
+
+    Supported account currencies: USD, ZAR.
+    If conversion rate is unavailable, falls back to raw account-currency formatting.
+    """
+    try:
+        from config.settings import get_settings
+        target = (get_settings().get("ui.display_currency", "ZAR") or "ZAR").upper()
+    except Exception:                                      # noqa: BLE001
+        target = "ZAR"
+    src = (account_currency or "USD").upper()
+
+    val = float(amount)
+    if src != target:
+        rate = get_rate("USDZAR")
+        if rate is not None and rate > 0:
+            if src == "USD" and target == "ZAR":
+                val = val * rate
+            elif src == "ZAR" and target == "USD":
+                val = val / rate
+
+    sign = ("+" if val >= 0 else "") if signed else ""
+    symbol = "R" if target == "ZAR" else "$"
+    return f"{sign}{symbol}{val:,.2f}"
+
+
 def display_currency() -> str:
     try:
         from config.settings import get_settings

@@ -13,6 +13,8 @@ Jobs:
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
@@ -79,8 +81,14 @@ class AlphaScheduler:
             reset_daily_counters()
 
         self.scheduler.add_job(_heartbeat, IntervalTrigger(minutes=5), id="heartbeat", replace_existing=True)
-        self.scheduler.add_job(_signal_scan, IntervalTrigger(minutes=scan_interval),
-                               id="signal_scan", replace_existing=True, max_instances=1)
+        self.scheduler.add_job(
+            _signal_scan,
+            IntervalTrigger(minutes=scan_interval),
+            id="signal_scan",
+            replace_existing=True,
+            max_instances=1,
+            next_run_time=datetime.now(timezone.utc),
+        )
         self.scheduler.add_job(_manage_positions, IntervalTrigger(seconds=60),
                                id="manage_positions", replace_existing=True, max_instances=1)
         self.scheduler.add_job(snapshot_account, IntervalTrigger(minutes=5),

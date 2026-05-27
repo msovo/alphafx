@@ -8,6 +8,7 @@ from plotly.subplots import make_subplots
 from analysis.indicators import compute_indicators
 from analysis.structure import support_resistance_levels
 from config.settings import get_settings
+from core.broker import get_broker
 from dashboard.components import page_header
 from data.feed import get_ohlcv
 
@@ -51,6 +52,39 @@ def render() -> None:
     for lvl in sr.get("support", []):
         fig.add_hline(y=lvl, line=dict(color="#00d4aa", width=1, dash="dot"), row=1, col=1)
 
+    # Overlay live open positions for selected pair
+    broker = get_broker()
+    live_positions = [p for p in broker.positions() if str(p.symbol).upper() == str(pair).upper()]
+    for p in live_positions:
+        side = str(p.side).upper()
+        side_col = "#00d4aa" if side == "BUY" else "#ff5d6a"
+        fig.add_hline(
+            y=float(p.price_open),
+            line=dict(color=side_col, width=2),
+            row=1, col=1,
+            annotation_text=f"{side} #{p.ticket} entry {p.price_open:.5f}",
+            annotation_position="right",
+            annotation_font_color=side_col,
+        )
+        if p.sl:
+            fig.add_hline(
+                y=float(p.sl),
+                line=dict(color="#ff5d6a", width=1, dash="dash"),
+                row=1, col=1,
+                annotation_text=f"SL {p.sl:.5f}",
+                annotation_position="right",
+                annotation_font_color="#ff5d6a",
+            )
+        if p.tp:
+            fig.add_hline(
+                y=float(p.tp),
+                line=dict(color="#00d4aa", width=1, dash="dash"),
+                row=1, col=1,
+                annotation_text=f"TP {p.tp:.5f}",
+                annotation_position="right",
+                annotation_font_color="#00d4aa",
+            )
+
     fig.add_trace(go.Scatter(x=df.index, y=df["rsi"], line=dict(color="#a78bfa", width=1.5), name="RSI"), row=2, col=1)
     fig.add_hline(y=70, line=dict(color="rgba(255,93,106,0.4)", dash="dot"), row=2, col=1)
     fig.add_hline(y=30, line=dict(color="rgba(0,212,170,0.4)", dash="dot"), row=2, col=1)
@@ -76,6 +110,10 @@ def render() -> None:
         theme="streamlit",
         config={"displaylogo": False, "modeBarButtonsToRemove": ["lasso2d", "select2d"]},
     )
+    if live_positions:
+        st.caption(f"Showing {len(live_positions)} live position line(s) for {pair}.")
+    elif getattr(broker, "name", "").lower() == "mock":
+        st.warning("Broker mode is MOCK — chart lines reflect mock positions, not MT5 terminal orders.")
 
     # ---- Gemini market commentary -----------------------------------------
     st.divider()
