@@ -17,15 +17,15 @@
   },
   "strategy": {
     "name": "High-Conviction Confluence",
-    "min_confluence_score": 82,
-    "min_rr": 2.0,
-    "target_rr": 3.0,
-    "use_pattern_filter": true,
-    "use_session_filter": true,
-    "require_mtf_alignment": true,
-    "require_volume_confirm": true,
-    "require_news_clear": true,
-    "require_sentiment_align": true,
+    "min_confluence_score": 5,
+    "min_rr": 0.5,
+    "target_rr": 1.0,
+    "use_pattern_filter": false,
+    "use_session_filter": false,
+    "require_mtf_alignment": false,
+    "require_volume_confirm": false,
+    "require_news_clear": false,
+    "require_sentiment_align": false,
     "custom_rules": []
   },
   "user_targets": {
@@ -33,13 +33,13 @@
     "max_days_to_target": 30,
     "preferred_pairs": ["EURUSD", "XAUUSD", "GBPUSD", "NAS100"],
     "preferred_sessions": ["london", "new_york", "overlap"],
-    "max_trades_per_day": 3,
-    "win_rate_target": 90
+    "max_trades_per_day": 50,
+    "win_rate_target": 0
   },
   "risk": {
     "risk_pct_per_trade": 0.5,
-    "max_concurrent_trades": 2,
-    "max_daily_trades": 3,
+    "max_concurrent_trades": 50,
+    "max_daily_trades": 50,
     "daily_loss_limit_pct": 3.0,
     "max_drawdown_pct": 8.0,
     "kill_switch_warning_pct": 70,
@@ -56,8 +56,8 @@
     "daily_loss_limit_pct": 5.0,
     "max_drawdown_pct": 10.0,
     "min_trading_days": 5,
-    "news_block_before_min": 45,
-    "news_block_after_min": 30
+    "news_block_before_min": 0,
+    "news_block_after_min": 0
   },
   "ai": {
     "provider": "gemini",
@@ -65,17 +65,17 @@
     "model": "gemini-2.5-pro",
     "vertex_project": "",
     "vertex_location": "us-central1",
-    "confidence_threshold": 80,
-    "ml_probability_threshold": 0.70,
+    "confidence_threshold": 1,
+    "ml_probability_threshold": 0.01,
     "temperature": 0.15,
     "max_retries": 3,
     "rate_limit_per_min": 15,
     "system_prompt_override": "",
     "use_web_search": true,
     "validators": {
-      "news_enabled": true,
-      "sentiment_enabled": true,
-      "sentiment_min_score": 60
+      "news_enabled": false,
+      "sentiment_enabled": false,
+      "sentiment_min_score": 0
     }
   },
   "ml": {

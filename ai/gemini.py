@@ -42,6 +42,7 @@ _DEFAULT = {
     "decision": "skip", "confidence": 0,
     "reason": "AI unavailable — defaulted to skip",
     "suggested_adjustment": "", "risk_flag": "high",
+    "ai_unavailable": True,
 }
 
 _client = None  # type: ignore
@@ -194,6 +195,7 @@ def evaluate_signal(signal: dict[str, Any]) -> dict[str, Any]:
     result = _validate(parsed) if parsed else _DEFAULT.copy()
     if err:
         result["reason"] = (result.get("reason") or "") + f" [api_error: {err[:120]}]"
+        result["ai_unavailable"] = True
 
     log_ai(prompt, text or "", signal_id=signal.get("signal_id"),
            model=model_name, latency_ms=latency, error=err)

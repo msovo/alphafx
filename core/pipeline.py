@@ -94,11 +94,14 @@ def run_signal_scan() -> list[dict]:
                 "ai_reason": ai_resp.get("reason"),
                 "ai_risk_flag": ai_resp.get("risk_flag"),
             })
+            # Skip the AI gate entirely when AI is unavailable (no API key / testing)
+            _ai_unavailable = ai_resp.get("ai_unavailable", False)
             ai_threshold = int(s.get("ai.confidence_threshold", 65))
-            if ai_resp.get("decision") != "trade" or int(ai_resp.get("confidence", 0)) < ai_threshold:
-                signal["filter_stage"] = "ai"
-                log_signal(signal)
-                continue
+            if not _ai_unavailable:
+                if ai_resp.get("decision") != "trade" or int(ai_resp.get("confidence", 0)) < ai_threshold:
+                    signal["filter_stage"] = "ai"
+                    log_signal(signal)
+                    continue
 
             # External validators (news + web sentiment)
             try:

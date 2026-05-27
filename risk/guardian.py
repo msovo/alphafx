@@ -113,7 +113,7 @@ def pre_trade_checks(signal: dict) -> tuple[bool, str]:
 
     if state.is_killed:
         return False, "kill_switch"
-    if not state.is_running and state.state.mode != "manual_confirm":
+    if not state.is_running and state.state.mode not in ("manual_confirm", "full_auto"):
         return False, "bot_not_running"
 
     # Concurrent positions
@@ -127,11 +127,12 @@ def pre_trade_checks(signal: dict) -> tuple[bool, str]:
     if today_count >= int(s.get("risk.max_daily_trades", 5)):
         return False, "max_daily_trades"
 
-    # News blackout
-    if s.get("prop_firm.news_block_before_min", 30) > 0:
+    # News blackout (only when block window > 0)
+    news_before = int(s.get("prop_firm.news_block_before_min", 30))
+    if news_before > 0:
         blocked, ev = is_news_blackout(
             signal["pair"],
-            before_min=int(s.get("prop_firm.news_block_before_min", 30)),
+            before_min=news_before,
             after_min=int(s.get("prop_firm.news_block_after_min", 15)),
         )
         if blocked:

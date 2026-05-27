@@ -43,7 +43,10 @@ def render() -> None:
     positions = broker.positions()
 
     if info is None:
-        st.warning("Broker offline — connect MT5 (or running in Mock mode).")
+        if broker.name == "mock":
+            st.info("Running on **MockBroker** (yfinance). Account metrics below are simulated.", icon="ℹ️")
+        else:
+            st.error("MT5 broker connected but account_info() returned None. Check terminal login.", icon="🔴")
 
     # --- KPI cards ----------------------------------------------------------
     from data.fx_rates import get_rate, fmt_money, display_currency

@@ -1,0 +1,302 @@
+{
+  "bot": {
+    "mode": "full_auto",
+    "scan_interval_minutes": 15,
+    "active_sessions": [
+      "london",
+      "new_york",
+      "overlap"
+    ],
+    "active_hours_utc": {
+      "start": "07:00",
+      "end": "21:00"
+    },
+    "pairs": [
+      "EURUSD",
+      "GBPUSD",
+      "USDJPY",
+      "USDCHF",
+      "USDCAD",
+      "AUDUSD",
+      "NZDUSD",
+      "EURJPY",
+      "GBPJPY",
+      "EURGBP",
+      "EURAUD",
+      "AUDJPY",
+      "CHFJPY",
+      "CADJPY",
+      "XAUUSD",
+      "XAGUSD",
+      "US30",
+      "NAS100",
+      "SPX500",
+      "GER40",
+      "UK100",
+      "USOIL",
+      "BTCUSD",
+      "ETHUSD"
+    ],
+    "primary_timeframe": "M15",
+    "trend_timeframe": "H4",
+    "structure_timeframe": "H1"
+  },
+  "strategy": {
+    "name": "High-Conviction Confluence",
+    "min_confluence_score": 16,
+    "min_rr": 2.0,
+    "target_rr": 3.0,
+    "use_pattern_filter": true,
+    "use_session_filter": true,
+    "require_mtf_alignment": true,
+    "require_volume_confirm": true,
+    "require_news_clear": true,
+    "require_sentiment_align": true,
+    "custom_rules": []
+  },
+  "user_targets": {
+    "profit_target_pct": 8.0,
+    "max_days_to_target": 30,
+    "preferred_pairs": [
+      "EURUSD",
+      "XAUUSD",
+      "GBPUSD",
+      "NAS100"
+    ],
+    "preferred_sessions": [
+      "london",
+      "new_york",
+      "overlap"
+    ],
+    "max_trades_per_day": 3,
+    "win_rate_target": 90
+  },
+  "risk": {
+    "risk_pct_per_trade": 0.5,
+    "max_concurrent_trades": 2,
+    "max_daily_trades": 3,
+    "daily_loss_limit_pct": 2.9,
+    "max_drawdown_pct": 8.0,
+    "kill_switch_warning_pct": 70,
+    "atr_sl_multiplier": 1.5,
+    "atr_tp_multiplier": 3.5,
+    "breakeven_at_r": 1.0,
+    "partial_close_at_r": 1.5,
+    "partial_close_pct": 50,
+    "trail_after_r": 2.0,
+    "max_spread_pips": 2.0
+  },
+  "prop_firm": {
+    "profile": "fundednext_stellar",
+    "daily_loss_limit_pct": 5.0,
+    "max_drawdown_pct": 10.0,
+    "min_trading_days": 5,
+    "news_block_before_min": 45,
+    "news_block_after_min": 30
+  },
+  "ai": {
+    "provider": "gemini",
+    "backend": "vertex",
+    "model": "gemini-2.5-pro",
+    "vertex_project": "",
+    "vertex_location": "us-central1",
+    "confidence_threshold": 12,
+    "ml_probability_threshold": 0.16,
+    "temperature": 0.15,
+    "max_retries": 3,
+    "rate_limit_per_min": 15,
+    "system_prompt_override": "just execute for now im testing",
+    "use_web_search": true,
+    "validators": {
+      "news_enabled": true,
+      "sentiment_enabled": true,
+      "sentiment_min_score": 13
+    }
+  },
+  "ml": {
+    "enabled": true,
+    "min_samples_to_train": 77,
+    "retrain_day": "sunday",
+    "retrain_hour_utc": 0,
+    "n_estimators": 294,
+    "max_depth": 5,
+    "test_size": 0.2,
+    "auto_retrain": true
+  },
+  "execution": {
+    "magic_number": 730501,
+    "max_slippage_pips": 3,
+    "max_retries": 3,
+    "retry_delay_sec": 2,
+    "comment_prefix": "AlphaBot"
+  },
+  "instruments": {
+    "EURUSD": {
+      "enabled": true,
+      "max_lot": 5.0,
+      "pip_value_usd": 10.0,
+      "digits": 5
+    },
+    "GBPUSD": {
+      "enabled": true,
+      "max_lot": 5.0,
+      "pip_value_usd": 10.0,
+      "digits": 5
+    },
+    "USDJPY": {
+      "enabled": true,
+      "max_lot": 5.0,
+      "pip_value_usd": 9.1,
+      "digits": 3
+    },
+    "USDCHF": {
+      "enabled": true,
+      "max_lot": 5.0,
+      "pip_value_usd": 11.0,
+      "digits": 5
+    },
+    "USDCAD": {
+      "enabled": true,
+      "max_lot": 5.0,
+      "pip_value_usd": 7.5,
+      "digits": 5
+    },
+    "AUDUSD": {
+      "enabled": true,
+      "max_lot": 5.0,
+      "pip_value_usd": 10.0,
+      "digits": 5
+    },
+    "NZDUSD": {
+      "enabled": true,
+      "max_lot": 5.0,
+      "pip_value_usd": 10.0,
+      "digits": 5
+    },
+    "EURJPY": {
+      "enabled": true,
+      "max_lot": 5.0,
+      "pip_value_usd": 9.1,
+      "digits": 3
+    },
+    "GBPJPY": {
+      "enabled": true,
+      "max_lot": 5.0,
+      "pip_value_usd": 9.1,
+      "digits": 3
+    },
+    "EURGBP": {
+      "enabled": true,
+      "max_lot": 5.0,
+      "pip_value_usd": 13.0,
+      "digits": 5
+    },
+    "EURAUD": {
+      "enabled": true,
+      "max_lot": 5.0,
+      "pip_value_usd": 7.0,
+      "digits": 5
+    },
+    "AUDJPY": {
+      "enabled": true,
+      "max_lot": 5.0,
+      "pip_value_usd": 9.1,
+      "digits": 3
+    },
+    "CHFJPY": {
+      "enabled": true,
+      "max_lot": 5.0,
+      "pip_value_usd": 9.1,
+      "digits": 3
+    },
+    "CADJPY": {
+      "enabled": true,
+      "max_lot": 5.0,
+      "pip_value_usd": 9.1,
+      "digits": 3
+    },
+    "XAUUSD": {
+      "enabled": true,
+      "max_lot": 2.0,
+      "pip_value_usd": 10.0,
+      "digits": 2
+    },
+    "XAGUSD": {
+      "enabled": true,
+      "max_lot": 2.0,
+      "pip_value_usd": 5.0,
+      "digits": 3
+    },
+    "US30": {
+      "enabled": true,
+      "max_lot": 1.0,
+      "pip_value_usd": 1.0,
+      "digits": 1
+    },
+    "NAS100": {
+      "enabled": true,
+      "max_lot": 1.0,
+      "pip_value_usd": 1.0,
+      "digits": 1
+    },
+    "SPX500": {
+      "enabled": true,
+      "max_lot": 1.0,
+      "pip_value_usd": 1.0,
+      "digits": 1
+    },
+    "GER40": {
+      "enabled": true,
+      "max_lot": 1.0,
+      "pip_value_usd": 1.0,
+      "digits": 1
+    },
+    "UK100": {
+      "enabled": true,
+      "max_lot": 1.0,
+      "pip_value_usd": 1.0,
+      "digits": 1
+    },
+    "USOIL": {
+      "enabled": true,
+      "max_lot": 1.0,
+      "pip_value_usd": 10.0,
+      "digits": 2
+    },
+    "BTCUSD": {
+      "enabled": true,
+      "max_lot": 0.5,
+      "pip_value_usd": 1.0,
+      "digits": 1
+    },
+    "ETHUSD": {
+      "enabled": true,
+      "max_lot": 1.0,
+      "pip_value_usd": 1.0,
+      "digits": 2
+    }
+  },
+  "notifications": {
+    "telegram_enabled": true,
+    "notify_signal_detected": false,
+    "notify_ai_approved": true,
+    "notify_trade_opened": true,
+    "notify_trade_closed": true,
+    "notify_breakeven": true,
+    "notify_partial_close": true,
+    "notify_risk_warning": true,
+    "notify_kill_switch": true,
+    "notify_daily_summary": true,
+    "notify_weekly_report": true,
+    "notify_ml_retrain": true,
+    "notify_api_error": true
+  },
+  "ui": {
+    "theme": "dark",
+    "auto_refresh_sec": 30,
+    "default_chart_pair": "EURUSD",
+    "default_chart_timeframe": "M15",
+    "mobile_responsive": true,
+    "display_currency": "ZAR"
+  }
+}

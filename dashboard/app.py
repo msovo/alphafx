@@ -124,6 +124,29 @@ with st.sidebar:
     st.caption(f"Heartbeat: {hb or '—'}")
 
     st.markdown("---")
+    # Broker status pill
+    from core.broker import get_broker as _get_broker, HAS_MT5
+    _broker = _get_broker()
+    if _broker.name == "mock":
+        st.markdown(
+            "<div style='background:rgba(255,170,0,0.15);border:1px solid #ffaa00;"
+            "border-radius:8px;padding:8px 12px;font-size:0.82em;color:#ffcc55;"
+            "margin-bottom:8px'>⚠️ <b>MockBroker</b> — yfinance data<br>"
+            "<span style='color:#94a3b8'>MT5 terminal not connected.</span></div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        _ai = _broker.account_info()
+        _label = f"{_ai.login} @ {_ai.server}" if _ai else "MT5 connected"
+        st.markdown(
+            f"<div style='background:rgba(0,212,170,0.1);border:1px solid #00d4aa;"
+            f"border-radius:8px;padding:8px 12px;font-size:0.82em;color:#00d4aa;"
+            f"margin-bottom:8px'>✅ <b>MT5 Live</b><br>"
+            f"<span style='color:#94a3b8'>{_label}</span></div>",
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("---")
     if st.button("🚪 Sign out", use_container_width=True):
         # Audit + stop bot if running
         try:
@@ -147,6 +170,20 @@ with st.sidebar:
             pass
         st.rerun()
 
+
+# ---------------------------------------------------------------------------
+# Global MockBroker warning banner (shown on every page)
+# ---------------------------------------------------------------------------
+from core.broker import get_broker as _gb, HAS_MT5 as _HAS_MT5
+_active_broker = _gb()
+if _active_broker.name == "mock":
+    st.warning(
+        "**MockBroker active** — all prices, charts and signals are sourced from "
+        "**yfinance** (delayed/synthetic), NOT from your MT5 account.\n\n"
+        "**To connect real MT5 data:** start the MetaTrader 5 terminal, then set "
+        "your credentials in **My Account → MT5 credentials** and restart the app.",
+        icon="⚠️",
+    )
 
 # ---------------------------------------------------------------------------
 # Page dispatch
