@@ -7,7 +7,11 @@ param(
     [string]$RepoUrl    = "https://github.com/msovo/alphafx.git",
     [string]$Branch     = "feature/multi-user-platform",
     [string]$InstallDir = "C:\alphabot-fx",
-    [string]$GitHubToken = $env:GITHUB_TOKEN
+    [string]$GitHubToken = $env:GITHUB_TOKEN,
+    # Shared secret for the MT5 HTTP bridge (core/mt5_bridge_server.py).
+    # Generate one with: [System.Guid]::NewGuid().ToString("N") + [System.Guid]::NewGuid().ToString("N")
+    [string]$MT5BridgeToken = $env:MT5_BRIDGE_TOKEN,
+    [int]$MT5BridgePort = 8600
 )
 
 $ErrorActionPreference = "Stop"
@@ -128,6 +132,46 @@ if ($svc) {
     Start-Service -Name $svcName
 } else {
     Write-Host "WARNING: service $svcName not registered yet. Run 'nssm start $svcName' manually." -ForegroundColor Yellow
+}
+
+# ---- 7b. MT5 HTTP bridge (optional, for remote dev machines) -------------
+# Lets a non-Windows dev machine (e.g. a Mac) drive this VM's live MT5
+# terminal without exposing anything publicly. Only reachable via SSH or
+# `gcloud compute start-iap-tunnel`, never opened to 0.0.0.0/0.
+if ($MT5BridgeToken) {
+    [System.Environment]::SetEnvironmentVariable("MT5_BRIDGE_TOKEN", $MT5BridgeToken, "Machine")
+
+    if (-not (Get-NetFirewallRule -Name "AlphaBotBridge" -ErrorAction SilentlyContinue)) {
+        Write-Host "==> Opening bridge port $MT5BridgePort to Google IAP range only"
+        New-NetFirewallRule -Name "AlphaBotBridge" `
+            -DisplayName "AlphaBot MT5 Bridge ($MT5BridgePort, IAP only)" `
+            -Direction Inbound -Protocol TCP -LocalPort $MT5BridgePort `
+            -RemoteAddress 35.235.240.0/20 -Action Allow | Out-Null
+    }
+
+    $bridgeSvc = "AlphaBotBridge"
+    $bridgeArgs = "-m core.mt5_bridge_server"
+    if (-not (Get-Service -Name $bridgeSvc -ErrorAction SilentlyContinue)) {
+        Write-Host "==> Installing $bridgeSvc Windows service"
+        & nssm install $bridgeSvc $venvPy $bridgeArgs
+        & nssm set     $bridgeSvc AppDirectory $InstallDir
+        & nssm set     $bridgeSvc Start SERVICE_AUTO_START
+        & nssm set     $bridgeSvc AppEnvironmentExtra "MT5_BRIDGE_TOKEN=$MT5BridgeToken" "MT5_BRIDGE_PORT=$MT5BridgePort"
+        & nssm set     $bridgeSvc AppStdout "$InstallDir\logs\bridge-stdout.log"
+        & nssm set     $bridgeSvc AppStderr "$InstallDir\logs\bridge-stderr.log"
+    } else {
+        Write-Host "==> $bridgeSvc service already installed — updating"
+        & nssm set     $bridgeSvc Application $venvPy
+        & nssm set     $bridgeSvc AppParameters $bridgeArgs
+        & nssm set     $bridgeSvc AppEnvironmentExtra "MT5_BRIDGE_TOKEN=$MT5BridgeToken" "MT5_BRIDGE_PORT=$MT5BridgePort"
+    }
+    Start-Sleep -Seconds 2
+    $bsvc = Get-Service -Name $bridgeSvc -ErrorAction SilentlyContinue
+    if ($bsvc) { Start-Service -Name $bridgeSvc } else {
+        Write-Host "WARNING: service $bridgeSvc not registered yet. Run 'nssm start $bridgeSvc' manually." -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "==> Skipping MT5 bridge (no -MT5BridgeToken supplied). Pass one to enable remote dev access." -ForegroundColor Yellow
 }
 
 # ---- 8. Scheduled auto-update (git pull every 15 min) --------------------

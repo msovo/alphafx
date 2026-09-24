@@ -198,6 +198,24 @@ class Settings:
         return env("MT5_PATH")
 
     @property
+    def mt5_require_demo(self) -> bool:
+        """Refuse to connect unless MT5 reports a demo trading account."""
+        value = env("MT5_REQUIRE_DEMO", "false") or "false"
+        return value.lower() in {"1", "true", "yes", "on"}
+
+    @property
+    def mt5_bridge_url(self) -> str | None:
+        """Base URL of the remote MT5 HTTP bridge (see core/mt5_bridge_server.py),
+        e.g. http://localhost:8600 when tunnelled from a Windows VM running MT5.
+        When set, `get_broker()` prefers RemoteBroker over local MetaTrader5."""
+        return env("MT5_BRIDGE_URL")
+
+    @property
+    def mt5_bridge_token(self) -> str | None:
+        """Shared bearer token for authenticating with the MT5 bridge."""
+        return env("MT5_BRIDGE_TOKEN")
+
+    @property
     def gemini_api_key(self) -> str | None:
         return env("GEMINI_API_KEY")
 

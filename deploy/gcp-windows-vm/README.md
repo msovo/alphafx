@@ -136,6 +136,59 @@ Total bootstrap time: ~10–15 minutes.
 
 ---
 
+## 5b. Optional: MT5 bridge for a local dev machine (e.g. macOS)
+
+`MetaTrader5` only runs on Windows, so a Mac/Linux dev machine can't import
+it directly. `core/mt5_bridge_server.py` exposes the VM's live MT5Broker
+over a small authenticated HTTP API, reachable only through a tunnel —
+never opened to the public internet.
+
+**On the VM** (re-run bootstrap, or one-off):
+
+```powershell
+# Generate a strong shared secret once
+$token = [System.Guid]::NewGuid().ToString("N") + [System.Guid]::NewGuid().ToString("N")
+Write-Host $token   # save this — you'll need it on the Mac too
+
+PowerShell -ExecutionPolicy Bypass -File C:\alphabot-fx\deploy\gcp-windows-vm\startup.ps1 `
+    -MT5BridgeToken $token
+```
+
+This installs the `AlphaBotBridge` service (auto-start, port 8600) and opens
+that port **only** to Google's IAP range (`35.235.240.0/20`) — not the public
+internet.
+
+Enable IAP TCP forwarding for the project once:
+
+```powershell
+gcloud services enable iap.googleapis.com
+gcloud compute firewall-rules create allow-iap-bridge `
+    --network=default --direction=INGRESS --action=ALLOW `
+    --rules=tcp:8600 --source-ranges=35.235.240.0/20
+```
+
+**On the Mac**, open a tunnel and point the app at it:
+
+```bash
+gcloud compute start-iap-tunnel alphabot-vm 8600 \
+    --local-host-port=localhost:8600 --zone=us-central1-a
+```
+
+Then in your local `.env`:
+
+```ini
+MT5_BRIDGE_URL=http://localhost:8600
+MT5_BRIDGE_TOKEN=<the token you generated above>
+```
+
+Restart the app locally — `get_broker()` prefers `RemoteBroker` over the
+local mock whenever `MT5_BRIDGE_URL` is set, so charts/trading now flow
+through the VM's real MT5 terminal while you develop on the Mac. Keep the
+`start-iap-tunnel` command running in a terminal while you work; if it's not
+running, the app quietly falls back to `MockBroker`.
+
+---
+
 ## 6. Day-to-day
 
 ### Continuous deployment

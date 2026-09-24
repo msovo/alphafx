@@ -9,7 +9,7 @@ synthetic `MockBroker` driven by `yfinance` so the UI remains usable.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 import threading
 import subprocess
@@ -18,9 +18,15 @@ import time
 from typing import Any
 
 import pandas as pd
+import requests
 
 from config.settings import get_settings
 from utils.logging import logger
+from utils.tls import ensure_macos_ca_bundle
+
+# Ensure outbound HTTPS (yfinance fallback) trusts the macOS keychain roots.
+# No-op off macOS, so it never affects the Windows VM / MT5 path.
+ensure_macos_ca_bundle()
 
 # ---------------------------------------------------------------------------
 # Optional import of MetaTrader5
@@ -48,6 +54,9 @@ class AccountInfo:
     free_margin: float
     leverage: int
     company: str = ""
+    trade_mode: str = "unknown"
+    trade_allowed: bool = False
+    trade_expert: bool = False
 
 
 @dataclass
@@ -129,6 +138,15 @@ class MT5Broker(BrokerBase):
             return None, str(err)
         except Exception:                                  # noqa: BLE001
             return None, "unknown MT5 error"
+
+    @staticmethod
+    def _trade_mode_name(value: int | None) -> str:
+        modes = {
+            getattr(mt5, "ACCOUNT_TRADE_MODE_DEMO", 0): "demo",
+            getattr(mt5, "ACCOUNT_TRADE_MODE_CONTEST", 1): "contest",
+            getattr(mt5, "ACCOUNT_TRADE_MODE_REAL", 2): "real",
+        }
+        return modes.get(value, "unknown")
 
     @staticmethod
     def _launch_terminal(path: str) -> None:
@@ -228,11 +246,28 @@ class MT5Broker(BrokerBase):
             logger.error(self.last_error)
             self.disconnect()
             return False
+        info = mt5.account_info()
+        if not info:
+            self.last_error = f"MT5 connected but account info is unavailable: {mt5.last_error()}"
+            logger.error(self.last_error)
+            self.disconnect()
+            return False
+        trade_mode = self._trade_mode_name(getattr(info, "trade_mode", None))
+        if s.mt5_require_demo and trade_mode != "demo":
+            self.last_error = (
+                f"MT5 account {info.login} is {trade_mode}, but MT5_REQUIRE_DEMO=true. "
+                "Connection refused for safety."
+            )
+            logger.error(self.last_error)
+            self.disconnect()
+            return False
         self.connected = True
         self.last_error = None
-        info = mt5.account_info()
         if info:
-            logger.success(f"MT5 connected — {info.login} @ {info.server} (balance={info.balance})")
+            logger.success(
+                f"MT5 connected — {info.login} @ {info.server} "
+                f"({trade_mode}, balance={info.balance})"
+            )
         return True
 
     def disconnect(self) -> None:
@@ -252,6 +287,9 @@ class MT5Broker(BrokerBase):
             login=a.login, name=a.name, server=a.server, currency=a.currency,
             balance=a.balance, equity=a.equity, margin=a.margin,
             free_margin=a.margin_free, leverage=a.leverage, company=a.company,
+            trade_mode=self._trade_mode_name(getattr(a, "trade_mode", None)),
+            trade_allowed=bool(getattr(a, "trade_allowed", False)),
+            trade_expert=bool(getattr(a, "trade_expert", False)),
         )
 
     def positions(self) -> list[Position]:
@@ -427,7 +465,7 @@ class MockBroker(BrokerBase):
             login=0, name="MockAccount", server="MockServer", currency="USD",
             balance=self._balance, equity=self._balance + floating,
             margin=0.0, free_margin=self._balance + floating,
-            leverage=100, company="AlphaBot Mock",
+            leverage=100, company="AlphaBot Mock", trade_mode="mock",
         )
 
     def positions(self) -> list[Position]:
@@ -497,11 +535,194 @@ class MockBroker(BrokerBase):
 
 
 # ---------------------------------------------------------------------------
+# Remote implementation (HTTP bridge to a Windows host running real MT5)
+# ---------------------------------------------------------------------------
+class RemoteBroker(BrokerBase):
+    """Drives a live MetaTrader 5 terminal through the small authenticated
+    HTTP bridge in `core/mt5_bridge_server.py`, which must be running on a
+    Windows host that has MT5 installed and logged in (e.g. the GCP VM).
+
+    Lets non-Windows dev machines get real MT5 execution/data without
+    importing the Windows-only `MetaTrader5` package themselves. Configure
+    via `MT5_BRIDGE_URL` / `MT5_BRIDGE_TOKEN` (typically pointed at a local
+    SSH/IAP tunnel endpoint, never a public address).
+    """
+    name = "remote"
+    _TIMEOUT = 10
+
+    def __init__(self) -> None:
+        self.last_error: str | None = None
+        self._base_url = ""
+        self._token = ""
+
+    def _headers(self) -> dict[str, str]:
+        return {"Authorization": f"Bearer {self._token}"} if self._token else {}
+
+    def _url(self, path: str) -> str:
+        return f"{self._base_url.rstrip('/')}{path}"
+
+    def connect(self) -> bool:
+        s = get_settings()
+        self._base_url = (s.mt5_bridge_url or "").strip()
+        self._token = (s.mt5_bridge_token or "").strip()
+        if not self._base_url:
+            self.last_error = "MT5_BRIDGE_URL not configured"
+            return False
+        if not self._token:
+            self.last_error = "MT5_BRIDGE_TOKEN not configured"
+            return False
+        try:
+            resp = requests.get(self._url("/health"), headers=self._headers(), timeout=self._TIMEOUT)
+        except Exception as exc:                           # noqa: BLE001
+            self.last_error = f"Bridge unreachable: {exc}"
+            return False
+        if resp.status_code == 401:
+            self.last_error = "Bridge auth rejected (check MT5_BRIDGE_TOKEN)"
+            return False
+        if resp.status_code != 200:
+            self.last_error = f"Bridge health check failed: HTTP {resp.status_code}"
+            return False
+        data = resp.json()
+        if not data.get("connected"):
+            self.last_error = data.get("error") or "Bridge reports MT5 not connected"
+            return False
+        self.connected = True
+        if s.mt5_require_demo:
+            info = self.account_info()
+            if info is None or info.trade_mode != "demo":
+                mode = info.trade_mode if info else "unknown"
+                self.connected = False
+                self.last_error = (
+                    f"Bridge account is {mode}, but MT5_REQUIRE_DEMO=true. "
+                    "Connection refused for safety."
+                )
+                return False
+        self.last_error = None
+        return True
+
+    def disconnect(self) -> None:
+        self.connected = False
+
+    def _get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any] | None:
+        try:
+            resp = requests.get(self._url(path), headers=self._headers(), params=params, timeout=self._TIMEOUT)
+        except Exception as exc:                           # noqa: BLE001
+            self.last_error = f"Bridge request failed: {exc}"
+            return None
+        if resp.status_code == 401:
+            self.connected = False
+            self.last_error = "Bridge auth rejected"
+            return None
+        if resp.status_code != 200:
+            self.last_error = f"Bridge error HTTP {resp.status_code}: {resp.text[:200]}"
+            return None
+        return resp.json()
+
+    def _post(self, path: str, json_body: dict[str, Any]) -> dict[str, Any] | None:
+        try:
+            resp = requests.post(self._url(path), headers=self._headers(), json=json_body, timeout=self._TIMEOUT)
+        except Exception as exc:                           # noqa: BLE001
+            self.last_error = f"Bridge request failed: {exc}"
+            return None
+        if resp.status_code == 401:
+            self.connected = False
+            self.last_error = "Bridge auth rejected"
+            return None
+        try:
+            return resp.json()
+        except Exception:                                  # noqa: BLE001
+            self.last_error = f"Bridge returned non-JSON (HTTP {resp.status_code})"
+            return None
+
+    def account_info(self) -> AccountInfo | None:
+        if not self.connected:
+            return None
+        data = self._get("/account")
+        return AccountInfo(**data) if data else None
+
+    def positions(self) -> list[Position]:
+        if not self.connected:
+            return []
+        data = self._get("/positions")
+        if not data:
+            return []
+        out: list[Position] = []
+        for p in data.get("positions", []):
+            p = dict(p)
+            p["open_time"] = datetime.fromisoformat(p["open_time"])
+            out.append(Position(**p))
+        return out
+
+    def fetch_ohlcv(self, symbol: str, timeframe: str, n: int = 500) -> pd.DataFrame:
+        if not self.connected:
+            return pd.DataFrame()
+        data = self._get("/ohlcv", params={"symbol": symbol, "timeframe": timeframe, "n": n})
+        if not data or not data.get("records"):
+            return pd.DataFrame()
+        df = pd.DataFrame(data["records"])
+        df["time"] = pd.to_datetime(df["time"], utc=True)
+        df.set_index("time", inplace=True)
+        return df[["open", "high", "low", "close", "volume"]]
+
+    def symbol_info(self, symbol: str) -> dict[str, Any] | None:
+        if not self.connected:
+            return None
+        return self._get("/symbol_info", params={"symbol": symbol})
+
+    def place_order(self, *, symbol: str, side: str, volume: float, sl: float, tp: float,
+                    comment: str = "", magic: int = 0, deviation: int = 10) -> OrderResult:
+        if not self.connected:
+            return OrderResult(False, None, -1, "Not connected")
+        data = self._post("/orders", {
+            "symbol": symbol, "side": side, "volume": volume, "sl": sl, "tp": tp,
+            "comment": comment, "magic": magic, "deviation": deviation,
+        })
+        if not data:
+            return OrderResult(False, None, -1, self.last_error or "Bridge order failed")
+        return OrderResult(**data)
+
+    def close_position(self, ticket: int) -> OrderResult:
+        if not self.connected:
+            return OrderResult(False, None, -1, "Not connected")
+        data = self._post(f"/positions/{ticket}/close", {})
+        if not data:
+            return OrderResult(False, None, -1, self.last_error or "Bridge close failed")
+        return OrderResult(**data)
+
+    def modify_position(self, ticket: int, sl: float | None = None, tp: float | None = None) -> OrderResult:
+        if not self.connected:
+            return OrderResult(False, None, -1, "Not connected")
+        data = self._post(f"/positions/{ticket}/modify", {"sl": sl, "tp": tp})
+        if not data:
+            return OrderResult(False, None, -1, self.last_error or "Bridge modify failed")
+        return OrderResult(**data)
+
+
+# ---------------------------------------------------------------------------
 # Factory / singleton
 # ---------------------------------------------------------------------------
 _broker: BrokerBase | None = None
 _last_mt5_retry_ts: float = 0.0
 _mt5_connecting: bool = False
+
+
+def _live_broker_configured() -> bool:
+    """True if either a remote MT5 bridge or a local MetaTrader5 install is usable."""
+    s = get_settings()
+    return bool((s.mt5_bridge_url or "").strip()) or HAS_MT5
+
+
+def _new_live_broker() -> BrokerBase | None:
+    """Build the preferred live broker: RemoteBroker (if a bridge URL is
+    configured) takes priority over a local MetaTrader5 install, so a Mac/
+    Linux dev machine talking to a Windows bridge never falls through to
+    the unavailable local MT5Broker."""
+    s = get_settings()
+    if (s.mt5_bridge_url or "").strip():
+        return RemoteBroker()
+    if HAS_MT5:
+        return MT5Broker()
+    return None
 
 
 def get_broker(force: bool = False) -> BrokerBase:
@@ -510,18 +731,17 @@ def get_broker(force: bool = False) -> BrokerBase:
     global _mt5_connecting
 
     # Always return immediately: if not yet initialized, spin up mock and
-    # attempt MT5 in a background thread so the render path never blocks.
+    # attempt MT5/bridge in a background thread so the render path never blocks.
     if _broker is None or force:
         # Seed mock immediately so callers never wait.
-        _broker.last_error = "MetaTrader5 package unavailable in current environment"
         _broker = MockBroker()
         _broker.last_error = "MetaTrader5 package unavailable in current environment"
         _broker.connect()
-        if HAS_MT5 and not _mt5_connecting:
+        if _live_broker_configured() and not _mt5_connecting:
             _mt5_connecting = True
             threading.Thread(target=_bg_mt5_connect, daemon=True).start()
 
-    elif isinstance(_broker, MockBroker) and HAS_MT5 and not _mt5_connecting:
+    elif isinstance(_broker, MockBroker) and _live_broker_configured() and not _mt5_connecting:
         now = time.time()
         if now - _last_mt5_retry_ts >= 30:
             _last_mt5_retry_ts = now
@@ -532,19 +752,21 @@ def get_broker(force: bool = False) -> BrokerBase:
 
 
 def _bg_mt5_connect() -> None:
-    """Background MT5 connection attempt — never blocks the render thread."""
+    """Background live-broker connection attempt — never blocks the render thread."""
     global _broker, _mt5_connecting, _last_mt5_retry_ts
     try:
-        b: BrokerBase = MT5Broker()
+        b = _new_live_broker()
+        if b is None:
+            return
         if b.connect():
             _broker = b
-            logger.success("MT5 connected in background thread.")
+            logger.success(f"{b.name.upper()} connected in background thread.")
         else:
             if _broker is not None:
-                _broker.last_error = getattr(b, "last_error", "MT5 connection failed")
-            logger.warning(f"Background MT5 connect failed: {getattr(b, 'last_error', '')}")
+                _broker.last_error = getattr(b, "last_error", "connection failed")
+            logger.warning(f"Background {b.name} connect failed: {getattr(b, 'last_error', '')}")
     except Exception as exc:                               # noqa: BLE001
-        logger.error(f"Background MT5 connect exception: {exc}")
+        logger.error(f"Background broker connect exception: {exc}")
     finally:
         _mt5_connecting = False
         _last_mt5_retry_ts = time.time()

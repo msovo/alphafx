@@ -24,6 +24,13 @@ AlphaBot FX is a fully autonomous Forex / Indices / Gold trading co-pilot that:
 
 ## 🚀 Quick Start
 
+### Windows + local MetaTrader 5 demo (recommended)
+
+The official Python integration talks to a running MT5 terminal through local
+inter-process communication, so AlphaFX and MetaTrader 5 must run under the
+same Windows user session. Log into the demo account in MT5 first and copy the
+exact server name shown by the terminal.
+
 ```powershell
 # 1. Clone & enter
 cd C:\Users\Msovo\Documents\alphabot-fx
@@ -33,18 +40,32 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 
 # 3. Install
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python -c "import MetaTrader5; print(MetaTrader5.__version__)"
 
 # 4. Configure
 copy .env.example .env
-# → fill in MT5_*, GEMINI_API_KEY, TELEGRAM_*
+# → fill in MT5_ACCOUNT, MT5_PASSWORD, MT5_SERVER
+# → keep MT5_REQUIRE_DEMO=true while validating the setup
 
-# 5. Launch dashboard
+# 5. Verify the demo connection (read-only; never places an order)
+python test_mt5_local.py
+
+# 6. Launch dashboard
 streamlit run dashboard/app.py
 
-# 6. (Optional) Run the autonomous scheduler
+# 7. (Optional) Run the autonomous scheduler
 python main.py
 ```
+
+Expected verifier result: `PASS: AlphaFX can read the configured MT5 demo
+account.` If your broker names the pair with a suffix (for example `EURUSD.a`),
+change the verifier's `symbol` value before rerunning it.
+
+On macOS/Linux, the native MT5 Python package is unavailable. Run AlphaFX on
+the Windows computer that runs MT5, or use the authenticated Windows bridge in
+[`deploy/gcp-windows-vm/README.md`](deploy/gcp-windows-vm/README.md).
 
 ## 🧩 Project Layout
 
